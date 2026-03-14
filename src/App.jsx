@@ -616,11 +616,14 @@ function BasketTab({ projectId, basket, setBasket }) {
       { key: "start_fmt", label: "Start Timecode" },
       { key: "end_fmt", label: "End Timecode" },
       { key: "participant_label", label: "Participant" },
+      { key: "market", label: "Market" },
+      { key: "segment", label: "Segment" },
       { key: "filename", label: "Source File" },
     ];
     const rows = basket.map(r => ({
       ...r, start_fmt: fmt(r.timecode?.start_ms), end_fmt: fmt(r.timecode?.end_ms),
       participant_label: r.source?.participant_label, filename: r.source?.filename,
+      market: r.source?.market ?? "", segment: r.source?.segment_name ?? "",
     }));
     downloadCSV(toCSV(rows, cols), `clip_basket_${Date.now()}.csv`);
   };
@@ -725,10 +728,15 @@ function BasketTab({ projectId, basket, setBasket }) {
             </p>
             <input value={outputFolder}
               onChange={e => setOutputFolder(e.target.value)}
+              placeholder="/Project Name/output-clips"
               style={{ width: "100%", padding: "8px 10px",
                 border: `1.5px solid ${DM.grey200}`, borderRadius: 4,
                 fontFamily: "'Space Mono', monospace", fontSize: 11,
                 boxSizing: "border-box", outline: "none" }} />
+            <p style={{ fontFamily: "'Poppins', sans-serif", fontSize: 10,
+              fontWeight: 300, color: DM.grey400, marginTop: 5, lineHeight: 1.4 }}>
+              Folder path inside your team Dropbox — not a URL.
+            </p>
           </div>
 
           <div style={{ marginBottom: 20 }}>
