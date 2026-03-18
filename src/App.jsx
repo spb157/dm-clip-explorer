@@ -1146,8 +1146,17 @@ function TranscriptsTab({ projectId, transcripts, setTranscripts }) {
   // ── Excel manifest ──────────────────────────────────────────
   const downloadTemplate = () => {
     const cols = ['interview_id','participant_label','dropbox_path','market','segment','gender','age_band'];
+    const instructions = [
+      '# INSTRUCTIONS — delete these rows before uploading',
+      '# interview_id: must match the start of each transcript filename e.g. P01 matches P01_Mario.docx',
+      '# dropbox_path: full path from app folder root INCLUDING filename AND extension',
+      '#   Extension is required — .mp4 .mov .avi .mkv etc',
+      '#   Example: /HSBC/Cast/P01.mp4   or   /ProjectName/Videos/Interview 01.mov',
+      '#   If the file is not .mp4 make sure you type the correct extension',
+      '#   Leave blank if unknown — clips cannot be extracted until this is set',
+    ].map(note => [note,'','','','','',''].join(','));
     const example = ['P01','Participant 01','/HSBC/Cast/P01.mp4','UK','Mass Affluent','Female','35-44'];
-    const csv = cols.join(',') + '\n' + example.join(',');
+    const csv = cols.join(',') + '\n' + instructions.join('\n') + '\n' + example.join(',');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = 'participant_manifest_template.csv';
@@ -1209,8 +1218,12 @@ function TranscriptsTab({ projectId, transcripts, setTranscripts }) {
 
       for (const item of (matchPreview || [])) {
         if (!item.match || !item.transcript) continue;
-        const dp = String(item.match.dropbox_path || item.match['Dropbox Path'] || '').trim();
+        let dp = String(item.match.dropbox_path || item.match['Dropbox Path'] || '').trim();
         if (dp) {
+          // Normalise: ensure leading slash
+          if (!dp.startsWith('/')) dp = '/' + dp;
+          // Ensure .mp4 extension if no extension present
+          if (!/\.\w{2,4}$/.test(dp)) dp = dp + '.mp4';
           await fetch(
             `${API_URL_RESOLVED}/api/projects/${projectId}/transcripts/${item.transcript.id}/dropbox-path`,
             { method: 'PATCH', headers: hdrs(), body: JSON.stringify({ dropbox_path: dp }) }
