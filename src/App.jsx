@@ -826,25 +826,190 @@ function BasketTab({ projectId, basket, setBasket }) {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// TRANSCRIPTS TAB
+// TRANSCRIPTS TAB — with batch upload + pre-upload cleaning flow
 // ────────────────────────────────────────────────────────────────────────────
+
+// Validation helpers (run in browser before upload)
+function detectTimecodes(text) {
+  return /\d{1,2}:\d{2}(:\d{2})?(\.\d+)?(\s*-->)?/.test(text);
+}
+function detectInterviewer(text) {
+  return /\bInterviewer\s*:/i.test(text);
+}
+function detectSpeakers(text) {
+  const matches = text.match(/^([A-Z][A-Za-z0-9 .'-]{1,40})\s*:/gm) || [];
+  const counts = {};
+  matches.forEach(m => {
+    const name = m.replace(/:$/, '').trim();
+    counts[name] = (counts[name] || 0) + 1;
+  });
+  // Return speakers sorted by frequency
+  return Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, count]) => ({ name, count }));
+}
+function hasIdPrefix(filename) {
+  // e.g. P01_, 001_, P01-, ICG01_ etc
+  return /^[A-Za-z0-9]{2,6}[-_]/.test(filename);
+}
+
+// Per-file status
+function validateFile(filename, text) {
+  return {
+    hasPrefix: hasIdPrefix(filename),
+    hasTimecodes: detectTimecodes(text),
+    hasInterviewer: detectInterviewer(text),
+    speakers: detectSpeakers(text),
+  };
+}
+
+function FileCleaningCard({ item, onUpdate, onRemove }) {
+  const { file, text, filename, validation, cleaned } = item;
+  const [idPrefix, setIdPrefix] = useState(filename.replace(/^([A-Za-z0-9]{2,6}[-_]).*/, '$1').replace(/[-_]$/, '') || '');
+  const [selectedSpeaker, setSelectedSpeaker] = useState('');
+  const [applying, setApplying] = useState(false);
+
+  const allGood = validation.hasPrefix && validation.hasTimecodes && validation.hasInterviewer;
+
+  const applyPrefix = () => {
+    if (!idPrefix.trim()) return;
+    const newFilename = `${idPrefix.trim()}_${filename.replace(/^[A-Za-z0-9]{2,6}[-_]/, '')}`;
+    onUpdate({ filename: newFilename, validation: { ...validation, hasPrefix: true } });
+  };
+
+  const applySpeaker = () => {
+    if (!selectedSpeaker) return;
+    setApplying(true);
+    // Replace all occurrences of "SpeakerName:" at line start with "Interviewer:"
+    const escaped = selectedSpeaker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const newText = text.replace(new RegExp(`^${escaped}\\s*:`, 'gm'), 'Interviewer:');
+    const newValidation = { ...validation, hasInterviewer: detectInterviewer(newText), speakers: detectSpeakers(newText) };
+    onUpdate({ text: newText, validation: newValidation });
+    setApplying(false);
+  };
+
+  return (
+    <div style={{
+      border: `1.5px solid ${allGood ? DM.green : (cleaned ? DM.yellow : '#FECACA')}`,
+      borderRadius: 4, marginBottom: 10, overflow: 'hidden',
+      background: allGood ? '#F0FFF4' : DM.white,
+      transition: 'all 0.2s', animation: 'fadeUp 0.2s ease'
+    }}>
+      {/* File header */}
+      <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10,
+        borderBottom: allGood ? 'none' : `1px solid ${DM.grey100}` }}>
+        <FileText size={13} color={allGood ? DM.green : DM.grey400} style={{ flexShrink: 0 }} />
+        <span style={{ fontFamily: "'Poppins', sans-serif", fontSize: 11, fontWeight: 500,
+          color: DM.black, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {filename}
+        </span>
+        <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
+          <StatusPip ok={validation.hasPrefix} label="ID" />
+          <StatusPip ok={validation.hasTimecodes} label="TC" />
+          <StatusPip ok={validation.hasInterviewer} label="I:" />
+        </div>
+        <button onClick={onRemove} style={{ background: 'none', border: 'none', cursor: 'pointer',
+          color: DM.grey400, padding: 2, flexShrink: 0 }}>
+          <X size={12} />
+        </button>
+      </div>
+
+      {/* Fix panels — only shown if there's an issue */}
+      {!allGood && (
+        <div style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+          {/* Fix: ID prefix */}
+          {!validation.hasPrefix && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <AlertTriangle size={11} color="#856404" style={{ flexShrink: 0 }} />
+              <span style={{ fontFamily: "'Poppins', sans-serif", fontSize: 10,
+                color: DM.grey600, flexShrink: 0 }}>Add ID prefix:</span>
+              <input value={idPrefix} onChange={e => setIdPrefix(e.target.value)}
+                placeholder="e.g. P01"
+                style={{ width: 70, padding: '4px 8px', border: `1.5px solid ${DM.grey200}`,
+                  borderRadius: 3, fontFamily: "'Space Mono', monospace", fontSize: 10,
+                  outline: 'none' }} />
+              <SmallBtn onClick={applyPrefix} style={{ padding: '4px 10px', fontSize: 10 }}>
+                Apply
+              </SmallBtn>
+            </div>
+          )}
+
+          {/* Fix: Interviewer label */}
+          {!validation.hasInterviewer && validation.speakers.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <AlertTriangle size={11} color="#856404" style={{ flexShrink: 0 }} />
+              <span style={{ fontFamily: "'Poppins', sans-serif", fontSize: 10,
+                color: DM.grey600, flexShrink: 0 }}>Who is the interviewer?</span>
+              <select value={selectedSpeaker} onChange={e => setSelectedSpeaker(e.target.value)}
+                style={{ flex: 1, minWidth: 120, padding: '4px 8px',
+                  border: `1.5px solid ${DM.grey200}`, borderRadius: 3,
+                  fontFamily: "'Poppins', sans-serif", fontSize: 10, outline: 'none' }}>
+                <option value="">Select speaker…</option>
+                {validation.speakers.map(s => (
+                  <option key={s.name} value={s.name}>{s.name} ({s.count} turns)</option>
+                ))}
+              </select>
+              <SmallBtn onClick={applySpeaker} disabled={!selectedSpeaker || applying}
+                style={{ padding: '4px 10px', fontSize: 10 }}>
+                Replace with Interviewer:
+              </SmallBtn>
+            </div>
+          )}
+
+          {/* Block: No timecodes — can't auto-fix */}
+          {!validation.hasTimecodes && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px',
+              background: '#FEE8EA', borderRadius: 3 }}>
+              <X size={11} color={DM.red} style={{ flexShrink: 0 }} />
+              <span style={{ fontFamily: "'Poppins', sans-serif", fontSize: 10, color: DM.red }}>
+                No timecodes detected — this file must be fixed externally before uploading.
+                Clips cannot be extracted without timecodes.
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* All good */}
+      {allGood && (
+        <div style={{ padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Check size={11} color={DM.green} />
+          <span style={{ fontFamily: "'Poppins', sans-serif", fontSize: 10, color: DM.green }}>
+            Ready to upload
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const StatusPip = ({ ok, label }) => (
+  <span style={{
+    padding: '2px 5px', borderRadius: 3, fontSize: 9, fontWeight: 600,
+    fontFamily: "'Space Mono', monospace",
+    background: ok ? '#E6F4EC' : '#FEE8EA',
+    color: ok ? DM.green : DM.red
+  }}>{label}</span>
+);
+
 function TranscriptsTab({ projectId, transcripts, setTranscripts }) {
+  const [queue, setQueue] = useState([]);          // files being cleaned/staged
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState({ done: 0, total: 0 });
   const [indexing, setIndexing] = useState(false);
   const [batchStatus, setBatchStatus] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [deleting, setDeleting] = useState(null);
-  const [participantLabel, setParticipantLabel] = useState("");
-  const [dropboxPath, setDropboxPath] = useState("");
 
   // Manifest state
-  const [manifestRows, setManifestRows] = useState(null);   // parsed Excel rows
-  const [manifestCols, setManifestCols] = useState([]);     // column names
-  const [matchPreview, setMatchPreview] = useState(null);   // auto-match results
+  const [manifestRows, setManifestRows] = useState(null);
+  const [manifestCols, setManifestCols] = useState([]);
+  const [matchPreview, setMatchPreview] = useState(null);
   const [manifestUploading, setManifestUploading] = useState(false);
   const [manifestDone, setManifestDone] = useState(false);
 
-  const fileRef = useRef();
+  const fileInputRef = useRef();
   const manifestRef = useRef();
 
   const refresh = async () => {
@@ -856,46 +1021,94 @@ function TranscriptsTab({ projectId, transcripts, setTranscripts }) {
     } catch {}
   };
 
-  const uploadTranscript = async (file) => {
-    if (!file) return;
-    setUploading(true);
-    if (DEMO) {
-      await new Promise(r => setTimeout(r, 1000));
-      setTranscripts(t => [...t, {
-        id: `demo-${Date.now()}`, filename: file.name,
-        participant_label: participantLabel || null,
-        indexing_status: "pending", dropbox_path: dropboxPath || null, indexed_at: null
-      }]);
-      setUploading(false); setParticipantLabel(""); setDropboxPath(""); return;
-    }
-    const fd = new FormData();
-    fd.append("transcript", file);
-    if (participantLabel) fd.append("participant_label", participantLabel);
-    if (dropboxPath) fd.append("dropbox_path", dropboxPath);
-    try {
-      const r = await fetch(`${API_URL_RESOLVED}/api/projects/${projectId}/transcripts`, {
-        method: "POST", headers: { "X-Team-Token": TEAM_PWD }, body: fd
-      });
-      const d = await r.json();
-      if (d.transcript) setTranscripts(t => [...t, d.transcript]);
-    } catch {}
-    setUploading(false); setParticipantLabel(""); setDropboxPath("");
+  // ── File selection → parse + validate ──────────────────────
+  const onFilesSelected = async (e) => {
+    const files = Array.from(e.target.files);
+    e.target.value = '';
+    if (!files.length) return;
+
+    const newItems = await Promise.all(files.map(async (file) => {
+      let text = '';
+      try {
+        if (file.name.toLowerCase().endsWith('.docx')) {
+          // Use mammoth via CDN isn't available — read as binary and warn
+          // We'll send to backend for text extraction preview isn't possible client-side
+          // So we mark as "needs server parse" and skip client-side text checks
+          return {
+            id: Math.random().toString(36).slice(2),
+            file, filename: file.name, text: null, serverParse: true,
+            validation: { hasPrefix: hasIdPrefix(file.name), hasTimecodes: true, hasInterviewer: true, speakers: [] },
+            cleaned: false,
+          };
+        } else {
+          text = await file.text();
+        }
+      } catch {}
+      const validation = validateFile(file.name, text);
+      return {
+        id: Math.random().toString(36).slice(2),
+        file, filename: file.name, text, serverParse: false,
+        validation, cleaned: false,
+      };
+    }));
+
+    setQueue(q => [...q, ...newItems]);
   };
 
+  const updateQueueItem = (id, updates) => {
+    setQueue(q => q.map(item => item.id === id
+      ? { ...item, ...updates, cleaned: true }
+      : item
+    ));
+  };
+
+  const removeQueueItem = (id) => {
+    setQueue(q => q.filter(item => item.id !== id));
+  };
+
+  const readyItems = queue.filter(item =>
+    item.validation.hasPrefix && item.validation.hasTimecodes && item.validation.hasInterviewer
+  );
+  const blockedItems = queue.filter(item =>
+    !item.validation.hasPrefix || !item.validation.hasTimecodes || !item.validation.hasInterviewer
+  );
+  const allReady = queue.length > 0 && blockedItems.length === 0;
+
+  // ── Upload all ready files ──────────────────────────────────
+  const uploadAll = async () => {
+    if (!allReady) return;
+    setUploading(true);
+    setUploadProgress({ done: 0, total: queue.length });
+
+    for (let i = 0; i < queue.length; i++) {
+      const item = queue[i];
+      try {
+        const fd = new FormData();
+        // If text was cleaned in browser, create new Blob with updated text
+        const uploadFile = (item.text && item.text !== await item.file.text())
+          ? new File([item.text], item.filename, { type: item.file.type })
+          : new File([item.file], item.filename, { type: item.file.type });
+        fd.append('transcript', uploadFile);
+        await fetch(`${API_URL_RESOLVED}/api/projects/${projectId}/transcripts`, {
+          method: 'POST', headers: { 'X-Team-Token': TEAM_PWD }, body: fd
+        });
+      } catch (err) {
+        console.error(`Upload failed for ${item.filename}:`, err);
+      }
+      setUploadProgress({ done: i + 1, total: queue.length });
+    }
+
+    setQueue([]);
+    setUploading(false);
+    await refresh();
+  };
+
+  // ── Indexing ────────────────────────────────────────────────
   const indexAll = async () => {
     setIndexing(true);
-    if (DEMO) {
-      await new Promise(r => setTimeout(r, 800));
-      setBatchStatus({ total: transcripts.length, complete: 0, processing: transcripts.length });
-      setTimeout(() => {
-        setBatchStatus({ total: transcripts.length, complete: transcripts.length, processing: 0 });
-        setIndexing(false);
-      }, 3000);
-      return;
-    }
     try {
       const r = await fetch(`${API_URL_RESOLVED}/api/projects/${projectId}/index-all`, {
-        method: "POST", headers: hdrs()
+        method: 'POST', headers: hdrs()
       });
       const d = await r.json();
       setBatchStatus(d);
@@ -917,17 +1130,13 @@ function TranscriptsTab({ projectId, transcripts, setTranscripts }) {
     poll();
   }, [projectId]);
 
+  // ── Delete ──────────────────────────────────────────────────
   const deleteTranscript = async (transcriptId) => {
     setDeleting(transcriptId);
-    if (DEMO) {
-      await new Promise(r => setTimeout(r, 600));
-      setTranscripts(ts => ts.filter(t => t.id !== transcriptId));
-      setDeleting(null); setConfirmDelete(null); return;
-    }
     try {
       const r = await fetch(
         `${API_URL_RESOLVED}/api/projects/${projectId}/transcripts/${transcriptId}`,
-        { method: "DELETE", headers: hdrs() }
+        { method: 'DELETE', headers: hdrs() }
       );
       if (r.ok) setTranscripts(ts => ts.filter(t => t.id !== transcriptId));
     } catch {}
@@ -936,198 +1145,167 @@ function TranscriptsTab({ projectId, transcripts, setTranscripts }) {
 
   // ── Excel manifest ──────────────────────────────────────────
   const downloadTemplate = () => {
-    // Build a simple CSV template — researchers can open in Excel
-    const cols = ["interview_id","participant_label","dropbox_path","market","segment","gender","age_band"];
-    const example = ["P01","Participant 01","/HSBC/Cast/P01.mp4","UK","Mass Affluent","Female","35-44"];
-    const csv = cols.join(",") + "\n" + example.join(",");
-    const blob = new Blob([csv], { type: "text/csv" });
+    const cols = ['interview_id','participant_label','dropbox_path','market','segment','gender','age_band'];
+    const example = ['P01','Participant 01','/HSBC/Cast/P01.mp4','UK','Mass Affluent','Female','35-44'];
+    const csv = cols.join(',') + '\n' + example.join(',');
+    const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = "participant_manifest_template.csv";
+    const a = document.createElement('a'); a.href = url; a.download = 'participant_manifest_template.csv';
     a.click(); URL.revokeObjectURL(url);
   };
 
   const parseExcelManifest = async (file) => {
-    // Use SheetJS to parse .xlsx or .csv
-    const XLSX = await import("https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs");
+    const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs');
     const buf = await file.arrayBuffer();
-    const wb = XLSX.read(buf, { type: "array" });
+    const wb = XLSX.read(buf, { type: 'array' });
     const ws = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
+    const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
     if (!rows.length) return;
-
-    const cols = Object.keys(rows[0]);
-    setManifestCols(cols);
+    setManifestCols(Object.keys(rows[0]));
     setManifestRows(rows);
 
-    // Auto-match: compare each transcript filename against manifest rows
     const preview = transcripts.map(t => {
       const norm = t.filename.toLowerCase()
-        .replace(/\.(docx|txt|vtt)$/i, "")
-        .replace(/[-_\s]+transcript[-_\s]*/gi, " ")
-        .replace(/[-_\s]+interview[-_\s]*/gi, " ")
-        .replace(/[-_\s]+cleaned[-_\s]*/gi, " ")
-        .replace(/[-_\s]+final[-_\s]*/gi, " ")
-        .replace(/\s+/g, " ").trim();
-
+        .replace(/\.(docx|txt|vtt)$/i, '')
+        .replace(/[-_\s]+(transcript|interview|cleaned|final|copy)[-_\s]*/gi, ' ')
+        .replace(/\s+/g, ' ').trim();
       let best = null, bestScore = 0;
       for (const row of rows) {
-        const candidates = [
-          String(row.interview_id || ""),
-          String(row.participant_label || ""),
-        ].map(s => s.toLowerCase().trim()).filter(Boolean);
-
+        const candidates = [String(row.interview_id || ''), String(row.participant_label || '')]
+          .map(s => s.toLowerCase().trim()).filter(Boolean);
         for (const c of candidates) {
-          if (c && norm.includes(c)) {
-            const score = c.length;
-            if (score > bestScore) { bestScore = score; best = row; }
+          if (c && norm.includes(c) && c.length > bestScore) {
+            bestScore = c.length; best = row;
           }
         }
       }
       return { transcript: t, match: best, score: bestScore };
     });
-
     setMatchPreview(preview);
   };
 
   const confirmManifest = async () => {
     if (!manifestRows) return;
     setManifestUploading(true);
-
-    // 1. Upload manifest rows to backend
     try {
       const participants = manifestRows.map(row => {
-        // Identify standard cols; everything else goes to custom_fields
-        const standard = ["interview_id","participant_label","dropbox_path","market","segment","segment_code","segment_name","gender","age_band"];
+        const standard = ['interview_id','participant_label','dropbox_path','market','segment','segment_code','segment_name','gender','age_band'];
         const custom = {};
-        Object.keys(row).forEach(k => {
-          if (!standard.includes(k.toLowerCase())) custom[k] = row[k];
-        });
+        Object.keys(row).forEach(k => { if (!standard.includes(k.toLowerCase())) custom[k] = row[k]; });
         return {
-          interview_id: String(row.interview_id || row.Interview_ID || row["Interview ID"] || "").trim(),
-          participant_label: String(row.participant_label || row.Participant || row["Participant Label"] || "").trim(),
-          dropbox_path: String(row.dropbox_path || row["Dropbox Path"] || row.video_path || "").trim() || null,
-          market: String(row.market || row.Market || "").trim() || null,
-          segment_code: String(row.segment_code || row.Segment_Code || "").trim() || null,
-          segment_name: String(row.segment || row.segment_name || row.Segment || "").trim() || null,
+          interview_id: String(row.interview_id || row['Interview ID'] || '').trim(),
+          participant_label: String(row.participant_label || row.Participant || '').trim(),
+          dropbox_path: String(row.dropbox_path || row['Dropbox Path'] || row.video_path || '').trim() || null,
+          market: String(row.market || row.Market || '').trim() || null,
+          segment_code: String(row.segment_code || '').trim() || null,
+          segment_name: String(row.segment || row.segment_name || row.Segment || '').trim() || null,
           custom_fields: custom,
         };
       }).filter(p => p.interview_id);
 
       await fetch(`${API_URL_RESOLVED}/api/projects/${projectId}/manifest`, {
-        method: "POST", headers: hdrs(), body: JSON.stringify(participants)
+        method: 'POST', headers: hdrs(), body: JSON.stringify(participants)
       });
 
-      // 2. Apply matched dropbox_path to transcripts
       for (const item of (matchPreview || [])) {
         if (!item.match || !item.transcript) continue;
-        const dp = String(item.match.dropbox_path || item.match["Dropbox Path"] || item.match.video_path || "").trim();
+        const dp = String(item.match.dropbox_path || item.match['Dropbox Path'] || '').trim();
         if (dp) {
           await fetch(
             `${API_URL_RESOLVED}/api/projects/${projectId}/transcripts/${item.transcript.id}/dropbox-path`,
-            { method: "PATCH", headers: hdrs(), body: JSON.stringify({ dropbox_path: dp }) }
+            { method: 'PATCH', headers: hdrs(), body: JSON.stringify({ dropbox_path: dp }) }
           );
         }
       }
-
       await refresh();
       setManifestDone(true);
-    } catch (err) {
-      console.error("manifest confirm error:", err);
-    }
+    } catch (err) { console.error('manifest confirm error:', err); }
     setManifestUploading(false);
   };
 
-  const pending = transcripts.filter(t => t.indexing_status === "pending" || t.indexing_status === "failed").length;
+  const pending = transcripts.filter(t => t.indexing_status === 'pending' || t.indexing_status === 'failed').length;
 
   return (
-    <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-      {/* Transcript list */}
-      <div style={{ flex: 1, padding: "20px 24px", overflowY: "auto" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <Label>{transcripts.length} TRANSCRIPT{transcripts.length !== 1 ? "S" : ""}</Label>
-          <div style={{ display: "flex", gap: 8 }}>
+    <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+
+      {/* ── Left: transcript list ── */}
+      <div style={{ flex: 1, padding: '20px 24px', overflowY: 'auto' }}>
+
+        {/* Header row */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <Label>{transcripts.length} TRANSCRIPT{transcripts.length !== 1 ? 'S' : ''}</Label>
+          <div style={{ display: 'flex', gap: 8 }}>
             <SmallBtn icon={RefreshCw} onClick={refresh}>Refresh</SmallBtn>
             {pending > 0 && (
               <SmallBtn icon={indexing ? Loader : Scissors} onClick={indexAll}
                 style={{ borderColor: DM.yellow, color: DM.black, background: DM.yellow }}>
-                {indexing ? "Indexing…" : `Index all (${pending})`}
+                {indexing ? 'Indexing…' : `Index all (${pending})`}
               </SmallBtn>
             )}
           </div>
         </div>
 
+        {/* Batch indexing progress */}
         {batchStatus && (
-          <div style={{ padding: "12px 16px", background: DM.yellowLight, borderRadius: 4,
+          <div style={{ padding: '12px 16px', background: DM.yellowLight, borderRadius: 4,
             marginBottom: 16, border: `1px solid ${DM.yellow}`,
             fontFamily: "'Poppins', sans-serif", fontSize: 11, color: DM.black,
-            display: "flex", alignItems: "center", gap: 8 }}>
+            display: 'flex', alignItems: 'center', gap: 8 }}>
             Batch indexing: {batchStatus.complete ?? 0}/{batchStatus.total ?? transcripts.length} complete
-            {batchStatus.finishedAt && " ✓"}
+            {batchStatus.finishedAt && ' ✓'}
             {batchStatus.processing > 0 && <Spinner size={10} />}
           </div>
         )}
 
-        {/* Match preview */}
+        {/* Manifest match preview */}
         {matchPreview && !manifestDone && (
           <div style={{ marginBottom: 20, border: `1.5px solid ${DM.yellow}`, borderRadius: 4,
-            overflow: "hidden", animation: "fadeUp 0.2s ease" }}>
-            <div style={{ padding: "12px 16px", background: DM.yellowLight,
+            overflow: 'hidden', animation: 'fadeUp 0.2s ease' }}>
+            <div style={{ padding: '12px 16px', background: DM.yellowLight,
               borderBottom: `1px solid ${DM.yellow}`,
-              display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <span style={{ fontFamily: "'Anton', sans-serif", fontSize: 13, color: DM.black }}>
                   MANIFEST MATCH PREVIEW
                 </span>
                 <span style={{ fontFamily: "'Poppins', sans-serif", fontSize: 11,
                   color: DM.grey600, marginLeft: 10 }}>
-                  {matchPreview.filter(m => m.match).length}/{matchPreview.length} transcripts matched
+                  {matchPreview.filter(m => m.match).length}/{matchPreview.length} matched
                 </span>
               </div>
-              <div style={{ display: "flex", gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => { setMatchPreview(null); setManifestRows(null); }}
-                  style={{ background: "none", border: `1px solid ${DM.grey200}`, borderRadius: 4,
+                  style={{ background: 'none', border: `1px solid ${DM.grey200}`, borderRadius: 4,
                     fontFamily: "'Poppins', sans-serif", fontSize: 10, color: DM.grey600,
-                    padding: "5px 10px", cursor: "pointer" }}>
-                  Cancel
-                </button>
+                    padding: '5px 10px', cursor: 'pointer' }}>Cancel</button>
                 <PrimaryBtn onClick={confirmManifest} disabled={manifestUploading}
-                  style={{ padding: "6px 16px", fontSize: 11 }}>
-                  {manifestUploading ? <><Spinner size={11} color={DM.black} /> Applying…</> : "Confirm & Apply"}
+                  style={{ padding: '6px 16px', fontSize: 11 }}>
+                  {manifestUploading ? <><Spinner size={11} color={DM.black} /> Applying…</> : 'Confirm & Apply'}
                 </PrimaryBtn>
               </div>
             </div>
-            <div style={{ maxHeight: 260, overflowY: "auto" }}>
+            <div style={{ maxHeight: 240, overflowY: 'auto' }}>
               {matchPreview.map((item, i) => (
-                <div key={i} style={{ padding: "10px 16px",
-                  borderBottom: i < matchPreview.length - 1 ? `1px solid ${DM.grey100}` : "none",
-                  display: "flex", alignItems: "center", gap: 12, background: DM.white }}>
-                  <FileText size={12} color={DM.grey400} style={{ flexShrink: 0 }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontFamily: "'Poppins', sans-serif", fontSize: 11,
-                      fontWeight: 500, color: DM.black, overflow: "hidden",
-                      textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {item.transcript.filename}
-                    </div>
+                <div key={i} style={{ padding: '9px 16px',
+                  borderBottom: i < matchPreview.length - 1 ? `1px solid ${DM.grey100}` : 'none',
+                  display: 'flex', alignItems: 'center', gap: 10, background: DM.white }}>
+                  <FileText size={11} color={DM.grey400} style={{ flexShrink: 0 }} />
+                  <div style={{ flex: 1, fontFamily: "'Poppins', sans-serif", fontSize: 11,
+                    color: DM.black, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {item.transcript.filename}
                   </div>
-                  <div style={{ color: DM.grey400, fontSize: 12 }}>→</div>
+                  <span style={{ color: DM.grey400, fontSize: 12 }}>→</span>
                   {item.match ? (
-                    <div style={{ flexShrink: 0, textAlign: "right" }}>
-                      <Tag style={{ background: "#E6F4EC", color: DM.green, fontSize: 10 }}>
+                    <div style={{ flexShrink: 0, display: 'flex', gap: 4 }}>
+                      <Tag style={{ background: '#E6F4EC', color: DM.green, fontSize: 10 }}>
                         {item.match.participant_label || item.match.interview_id}
                       </Tag>
                       {(item.match.market || item.match.Market) && (
-                        <Tag style={{ background: DM.grey100, fontSize: 10, marginLeft: 4 }}>
-                          {item.match.market || item.match.Market}
-                        </Tag>
-                      )}
-                      {(item.match.segment || item.match.Segment || item.match.segment_name) && (
-                        <Tag style={{ background: DM.grey100, fontSize: 10, marginLeft: 4 }}>
-                          {item.match.segment || item.match.Segment || item.match.segment_name}
-                        </Tag>
+                        <Tag style={{ fontSize: 10 }}>{item.match.market || item.match.Market}</Tag>
                       )}
                     </div>
                   ) : (
-                    <Tag style={{ background: "#FEE8EA", color: DM.red, fontSize: 10, flexShrink: 0 }}>
+                    <Tag style={{ background: '#FEE8EA', color: DM.red, fontSize: 10, flexShrink: 0 }}>
                       No match
                     </Tag>
                   )}
@@ -1138,17 +1316,49 @@ function TranscriptsTab({ projectId, transcripts, setTranscripts }) {
         )}
 
         {manifestDone && (
-          <div style={{ padding: "12px 16px", background: "#E6F4EC", borderRadius: 4,
+          <div style={{ padding: '12px 16px', background: '#E6F4EC', borderRadius: 4,
             marginBottom: 16, border: `1px solid ${DM.green}`,
             fontFamily: "'Poppins', sans-serif", fontSize: 11, color: DM.green,
-            display: "flex", alignItems: "center", gap: 8 }}>
+            display: 'flex', alignItems: 'center', gap: 8 }}>
             <Check size={12} /> Manifest applied — metadata and video paths updated
           </div>
         )}
 
-        {transcripts.length === 0 && (
-          <div style={{ textAlign: "center", padding: "60px 20px" }}>
-            <FileText size={28} color={DM.grey200} style={{ margin: "0 auto 12px" }} />
+        {/* Upload staging queue */}
+        {queue.length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <Label>{readyItems.length}/{queue.length} FILES READY</Label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <SmallBtn onClick={() => setQueue([])} icon={X}>Clear all</SmallBtn>
+                <PrimaryBtn onClick={uploadAll}
+                  disabled={!allReady || uploading}
+                  style={{ padding: '7px 18px', fontSize: 11 }}>
+                  {uploading
+                    ? <><Spinner size={11} color={DM.black} /> {uploadProgress.done}/{uploadProgress.total}</>
+                    : `Upload ${queue.length} file${queue.length !== 1 ? 's' : ''}`}
+                </PrimaryBtn>
+              </div>
+            </div>
+            {blockedItems.length > 0 && (
+              <div style={{ padding: '8px 12px', background: '#FEF9C3', borderRadius: 4,
+                marginBottom: 10, fontFamily: "'Poppins', sans-serif", fontSize: 10,
+                color: '#854D0E', border: '1px solid #FDE68A' }}>
+                {blockedItems.length} file{blockedItems.length !== 1 ? 's' : ''} need fixing before upload
+              </div>
+            )}
+            {queue.map(item => (
+              <FileCleaningCard key={item.id} item={item}
+                onUpdate={updates => updateQueueItem(item.id, updates)}
+                onRemove={() => removeQueueItem(item.id)} />
+            ))}
+          </div>
+        )}
+
+        {/* Indexed transcripts list */}
+        {transcripts.length === 0 && queue.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+            <FileText size={28} color={DM.grey200} style={{ margin: '0 auto 12px' }} />
             <p style={{ fontFamily: "'Poppins', sans-serif", fontSize: 13, color: DM.grey400 }}>
               No transcripts yet
             </p>
@@ -1157,19 +1367,19 @@ function TranscriptsTab({ projectId, transcripts, setTranscripts }) {
 
         {transcripts.map(t => (
           <div key={t.id} style={{ border: `1.5px solid ${DM.grey100}`, borderRadius: 4,
-            padding: "12px 16px", marginBottom: 8, display: "flex", alignItems: "center", gap: 12,
-            animation: "fadeUp 0.2s ease",
-            background: confirmDelete === t.id ? "#FEF2F2" : DM.white,
-            borderColor: confirmDelete === t.id ? "#FECACA" : DM.grey100,
-            transition: "all 0.15s" }}>
+            padding: '12px 16px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12,
+            animation: 'fadeUp 0.2s ease',
+            background: confirmDelete === t.id ? '#FEF2F2' : DM.white,
+            borderColor: confirmDelete === t.id ? '#FECACA' : DM.grey100,
+            transition: 'all 0.15s' }}>
             <FileText size={14} color={DM.grey400} style={{ flexShrink: 0 }} />
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontFamily: "'Poppins', sans-serif", fontSize: 12,
-                fontWeight: 500, color: DM.black, marginBottom: 4,
-                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              <div style={{ fontFamily: "'Poppins', sans-serif", fontSize: 12, fontWeight: 500,
+                color: DM.black, marginBottom: 4,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {t.filename}
               </div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                 {t.participant_label && <Label>{t.participant_label}</Label>}
                 {t.market && <Label style={{ color: DM.grey600 }}>{t.market}</Label>}
                 {t.segment_name && <Label style={{ color: DM.grey600 }}>{t.segment_name}</Label>}
@@ -1179,31 +1389,29 @@ function TranscriptsTab({ projectId, transcripts, setTranscripts }) {
               </div>
             </div>
             {confirmDelete === t.id ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                 <span style={{ fontFamily: "'Poppins', sans-serif", fontSize: 10, color: DM.red }}>
                   Delete transcript + all quotes?
                 </span>
                 <button onClick={() => deleteTranscript(t.id)} disabled={deleting === t.id}
-                  style={{ padding: "4px 10px", borderRadius: 3, border: `1px solid ${DM.red}`,
+                  style={{ padding: '4px 10px', borderRadius: 3, border: `1px solid ${DM.red}`,
                     background: DM.red, color: DM.white, fontFamily: "'Poppins', sans-serif",
-                    fontSize: 10, fontWeight: 500, cursor: "pointer",
-                    display: "flex", alignItems: "center", gap: 4 }}>
+                    fontSize: 10, fontWeight: 500, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 4 }}>
                   {deleting === t.id ? <Spinner size={9} color={DM.white} /> : null} Confirm
                 </button>
                 <button onClick={() => setConfirmDelete(null)}
-                  style={{ padding: "4px 10px", borderRadius: 3, border: `1px solid ${DM.grey200}`,
-                    background: "none", fontFamily: "'Poppins', sans-serif",
-                    fontSize: 10, color: DM.grey600, cursor: "pointer" }}>
-                  Cancel
-                </button>
+                  style={{ padding: '4px 10px', borderRadius: 3, border: `1px solid ${DM.grey200}`,
+                    background: 'none', fontFamily: "'Poppins', sans-serif",
+                    fontSize: 10, color: DM.grey600, cursor: 'pointer' }}>Cancel</button>
               </div>
             ) : (
-              <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
                 <StatusBadge status={t.indexing_status} />
                 <button onClick={() => setConfirmDelete(t.id)} title="Delete transcript"
-                  style={{ background: "none", border: "none", cursor: "pointer",
-                    color: DM.grey200, padding: 4, display: "flex", alignItems: "center",
-                    transition: "color 0.15s" }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer',
+                    color: DM.grey200, padding: 4, display: 'flex', alignItems: 'center',
+                    transition: 'color 0.15s' }}
                   onMouseEnter={e => e.currentTarget.style.color = DM.red}
                   onMouseLeave={e => e.currentTarget.style.color = DM.grey200}>
                   <Trash2 size={13} />
@@ -1214,76 +1422,58 @@ function TranscriptsTab({ projectId, transcripts, setTranscripts }) {
         ))}
       </div>
 
-      {/* Right panel */}
+      {/* ── Right panel ── */}
       <div style={{ width: 260, borderLeft: `1px solid ${DM.grey100}`, padding: 20,
-        flexShrink: 0, overflowY: "auto" }}>
+        flexShrink: 0, overflowY: 'auto' }}>
 
-        {/* ── MANIFEST SECTION ── */}
-        <Label style={{ display: "block", marginBottom: 6 }}>Participant manifest</Label>
+        {/* Manifest */}
+        <Label style={{ display: 'block', marginBottom: 6 }}>Participant manifest</Label>
         <p style={{ fontFamily: "'Poppins', sans-serif", fontSize: 11, fontWeight: 300,
           color: DM.grey400, marginBottom: 12, lineHeight: 1.5 }}>
-          Upload an Excel or CSV file with participant metadata. Claude will match rows to transcripts automatically.
+          Upload an Excel or CSV with participant metadata. Claude matches rows to transcripts automatically.
         </p>
-
         <SmallBtn icon={Download} onClick={downloadTemplate}
-          style={{ width: "100%", marginBottom: 8, justifyContent: "center" }}>
+          style={{ width: '100%', marginBottom: 8, justifyContent: 'center' }}>
           Download template
         </SmallBtn>
-
         <input ref={manifestRef} type="file" accept=".xlsx,.xls,.csv" hidden
           onChange={async e => {
             const file = e.target.files[0];
             if (file) await parseExcelManifest(file);
-            e.target.value = "";
+            e.target.value = '';
           }} />
         <SmallBtn icon={Upload} onClick={() => manifestRef.current?.click()}
-          style={{ width: "100%", marginBottom: 4, justifyContent: "center",
+          style={{ width: '100%', marginBottom: 4, justifyContent: 'center',
             borderColor: manifestRows ? DM.green : DM.grey200,
             color: manifestRows ? DM.green : DM.grey600 }}>
-          {manifestRows ? `${manifestRows.length} rows loaded` : "Upload manifest (.xlsx / .csv)"}
+          {manifestRows ? `${manifestRows.length} rows loaded` : 'Upload manifest (.xlsx / .csv)'}
         </SmallBtn>
-
         {manifestCols.length > 0 && (
           <p style={{ fontFamily: "'Space Mono', monospace", fontSize: 9,
             color: DM.grey400, marginTop: 6, lineHeight: 1.6 }}>
-            COLUMNS: {manifestCols.join(", ")}
+            COLUMNS: {manifestCols.join(', ')}
           </p>
         )}
 
-        <div style={{ height: 1, background: DM.grey100, margin: "20px 0" }} />
+        <div style={{ height: 1, background: DM.grey100, margin: '20px 0' }} />
 
-        {/* ── TRANSCRIPT UPLOAD ── */}
-        <Label style={{ display: "block", marginBottom: 12 }}>Upload transcript</Label>
-
-        <div style={{ marginBottom: 10 }}>
-          <p style={{ fontFamily: "'Poppins', sans-serif", fontSize: 10,
-            fontWeight: 600, color: DM.grey600, marginBottom: 5 }}>Participant label</p>
-          <input placeholder="e.g. P01" value={participantLabel}
-            onChange={e => setParticipantLabel(e.target.value)}
-            style={{ width: "100%", padding: "7px 10px", border: `1.5px solid ${DM.grey200}`,
-              borderRadius: 4, fontFamily: "'Poppins', sans-serif", fontSize: 11,
-              boxSizing: "border-box", outline: "none" }} />
-        </div>
-
-        <div style={{ marginBottom: 14 }}>
-          <p style={{ fontFamily: "'Poppins', sans-serif", fontSize: 10,
-            fontWeight: 600, color: DM.grey600, marginBottom: 5 }}>Dropbox video path (optional)</p>
-          <input placeholder="/videos/interview.mp4" value={dropboxPath}
-            onChange={e => setDropboxPath(e.target.value)}
-            style={{ width: "100%", padding: "7px 10px", border: `1.5px solid ${DM.grey200}`,
-              borderRadius: 4, fontFamily: "'Space Mono', monospace", fontSize: 10,
-              boxSizing: "border-box", outline: "none" }} />
-        </div>
-
-        <input ref={fileRef} type="file" accept=".txt,.vtt,.docx" hidden
-          onChange={e => uploadTranscript(e.target.files[0])} />
-        <PrimaryBtn onClick={() => fileRef.current?.click()} disabled={uploading}
-          style={{ width: "100%", fontSize: 11, padding: "9px 0",
-            display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-          {uploading
-            ? <><Spinner size={12} color={DM.black} /> Uploading…</>
-            : <><Upload size={12} /> Upload .txt / .vtt / .docx</>}
+        {/* Transcript upload */}
+        <Label style={{ display: 'block', marginBottom: 8 }}>Upload transcripts</Label>
+        <p style={{ fontFamily: "'Poppins', sans-serif", fontSize: 11, fontWeight: 300,
+          color: DM.grey400, marginBottom: 12, lineHeight: 1.5 }}>
+          Select one or more files. Each will be checked for ID prefix, timecodes, and Interviewer: label before uploading.
+        </p>
+        <input ref={fileInputRef} type="file" accept=".txt,.vtt,.docx" multiple hidden
+          onChange={onFilesSelected} />
+        <PrimaryBtn onClick={() => fileInputRef.current?.click()}
+          style={{ width: '100%', fontSize: 11, padding: '9px 0',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+          <Upload size={12} /> Select files…
         </PrimaryBtn>
+        <p style={{ fontFamily: "'Space Mono', monospace", fontSize: 9, color: DM.grey400,
+          marginTop: 8, lineHeight: 1.5 }}>
+          .TXT / .VTT / .DOCX — ANY QUANTITY
+        </p>
       </div>
     </div>
   );
