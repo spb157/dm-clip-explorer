@@ -12,12 +12,12 @@ const DM = {
   green: "#38A169",
 };
 
-const DEMO = (typeof API_URL === "undefined") || API_URL === "https://your-app.railway.app";
-const API_URL_RESOLVED  = (typeof API_URL !== "undefined") ? API_URL : "https://your-app.railway.app";
-const TEAM_PWD          = (typeof TEAM_PASSWORD !== "undefined") ? TEAM_PASSWORD : "yourteampassword";
+const DEMO = false;
+const API_URL_RESOLVED  = "https://dm-clip-platform-backend-production.up.railway.app";
+const TEAM_PWD          = "dmresearch2025";
 
 // Swap these three before deploying:
-// const API_URL      = "https://your-app.railway.app";
+// const API_URL      = "https://dm-clip-platform-backend-production.up.railway.app";
 // const TEAM_PASSWORD = "yourteampassword";
 
 const hdrs = () => ({ "Content-Type": "application/json", "X-Team-Token": TEAM_PWD });
