@@ -2068,9 +2068,21 @@ function TranscriptsTab({ projectId, transcripts, setTranscripts, onAddToBasket,
         .replace(/\s+/g, ' ').trim();
       let best = null, bestScore = 0;
       for (const row of rows) {
-        const candidates = [String(row.interview_id || ''), String(row.participant_label || '')]
-          .map(s => s.toLowerCase().trim()).filter(Boolean);
-        for (const c of candidates) {
+        // Build a list of candidate strings to try — full values first, then individual words
+        const fullCandidates = [
+          String(row.interview_id || ''),
+          String(row.participant_label || ''),
+        ].map(s => s.toLowerCase().trim()).filter(Boolean);
+
+        // Also try each word from interview_id (handles "UK AM Peter" → try "peter")
+        const wordCandidates = fullCandidates
+          .flatMap(s => s.split(/[\s,_-]+/))
+          .map(s => s.trim())
+          .filter(s => s.length >= 3); // skip short tokens like "uk", "am"
+
+        const allCandidates = [...fullCandidates, ...wordCandidates];
+
+        for (const c of allCandidates) {
           if (c && norm.includes(c) && c.length > bestScore) {
             bestScore = c.length; best = row;
           }
