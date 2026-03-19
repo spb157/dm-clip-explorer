@@ -792,13 +792,15 @@ function BasketTab({ projectId, basket, setBasket }) {
       setExtracting(false); return;
     }
     try {
-      // Build clip specs — each item can have custom timecodes and padding
-      const clips = basket.map(b => ({
+      // Build clip specs — each item can have custom timecodes, padding, and label
+      const clips = basket.map((b, i) => ({
         quote_id: b.quote_id,
         start_ms: b.timecode?.start_ms,
         end_ms: b.timecode?.end_ms,
         padding_ms: b._padding ?? 500,
         dropbox_video_path: b.source?.dropbox_video_path,
+        label: b._customLabel || null,
+        index: i + 1,
       }));
       const r = await fetch(`${API_URL_RESOLVED}/api/projects/${projectId}/clips`, {
         method: 'POST', headers: hdrs(),
