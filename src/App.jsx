@@ -1239,6 +1239,16 @@ function TranscriptsTab({ projectId, transcripts, setTranscripts, onAddToBasket 
     } catch {}
   };
 
+  // Auto-poll every 8s while any transcript is processing
+  useEffect(() => {
+    const anyProcessing = transcripts.some(
+      t => t.indexing_status === 'processing' || t.indexing_status === 'pending'
+    );
+    if (!anyProcessing) return;
+    const id = setInterval(refresh, 8000);
+    return () => clearInterval(id);
+  }, [transcripts]);
+
   // ── File selection → parse + validate ──────────────────────
   const onFilesSelected = async (e) => {
     const files = Array.from(e.target.files);
@@ -1616,7 +1626,15 @@ function TranscriptsTab({ projectId, transcripts, setTranscripts, onAddToBasket 
                 {t.market && <Label style={{ color: DM.grey600 }}>{t.market}</Label>}
                 {t.segment_name && <Label style={{ color: DM.grey600 }}>{t.segment_name}</Label>}
                 {t.dropbox_path && <Label style={{ color: DM.grey200 }}>{t.dropbox_path}</Label>}
-                {t.quote_count !== undefined && <Label>{t.quote_count} quotes</Label>}
+                {t.indexing_status === 'processing' && (
+                  <Label style={{ color: '#B7860A', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Spinner size={8} color="#B7860A" />
+                    {t.quote_count > 0 ? `${t.quote_count} quotes so far…` : 'indexing…'}
+                  </Label>
+                )}
+                {t.indexing_status === 'complete' && t.quote_count !== undefined && (
+                  <Label>{t.quote_count} quotes</Label>
+                )}
                 <TimecodeWarning avgQuoteMs={t.avg_quote_ms} />
               </div>
             </div>
