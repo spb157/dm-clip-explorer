@@ -1293,7 +1293,10 @@ function TranscriptReader({ transcript, projectId, basket, setBasket, onBack }) 
   const [clipLabel, setClipLabel] = useState('');
   const [addedId, setAddedId] = useState(null);
   // Always start null and populate from a live DB fetch — never trust the prop snapshot
-  const [dropboxPath, setDropboxPath] = useState(null);
+  // Initialise from prop immediately — openReader already fetches fresh data before
+  // setting readerTranscript, so transcript.dropbox_path is already up-to-date.
+  // The useEffect below overwrites with DB value if the fetches succeed.
+  const [dropboxPath, setDropboxPath] = useState(transcript.dropbox_path || null);
   const containerRef = useRef(null);
   const labelInputRef = useRef(null);
 
