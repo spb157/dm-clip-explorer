@@ -1593,7 +1593,7 @@ function TranscriptsTab({ projectId, transcripts, setTranscripts, onAddToBasket 
         )}
 
         {transcripts.map(t => (
-          <React.Fragment key={t.id}>
+          <div key={t.id} style={{ display: "contents" }}>
           <div style={{ border: `1.5px solid ${DM.grey100}`, borderRadius: 4,
             padding: '12px 16px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12,
             animation: 'fadeUp 0.2s ease',
@@ -1668,7 +1668,7 @@ function TranscriptsTab({ projectId, transcripts, setTranscripts, onAddToBasket 
               onClose={() => setClipPicker(null)}
             />
           )}
-          </React.Fragment>
+          </div>
         ))}
       </div>
 
