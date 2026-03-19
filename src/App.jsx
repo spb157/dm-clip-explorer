@@ -697,6 +697,14 @@ function BasketCard({ item, onUpdate, onRemove }) {
             <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 9, color: DM.grey400 }}>
               {durationSec}s
             </span>
+            {!item.source?.dropbox_video_path && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3,
+                padding: '2px 6px', borderRadius: 3, fontSize: 9, fontWeight: 600,
+                fontFamily: "'Space Mono', monospace", textTransform: 'uppercase',
+                background: '#FEF9C3', color: '#854D0E' }}>
+                <AlertTriangle size={8} /> no video path
+              </span>
+            )}
             {item.source?.filename && (
               <Tag style={{ background: DM.grey50 }}>{item.source.filename}</Tag>
             )}
@@ -956,6 +964,28 @@ function BasketTab({ projectId, basket, setBasket }) {
 
   const extract = async () => {
     setExtracting(true);
+
+    // Pre-flight: check for clips with no video path
+    const noPath = basket.filter(b => !b.source?.dropbox_video_path);
+    if (noPath.length === basket.length) {
+      // All clips lack a video path — nothing to extract
+      setJobStatus({
+        status: 'failed',
+        error_message: `No clips have a Dropbox video path set. Add video paths via the participant manifest on the Transcripts tab, then re-upload or patch paths before extracting.`,
+      });
+      setExtracting(false);
+      return;
+    }
+    if (noPath.length > 0) {
+      // Some clips lack a path — warn but allow partial extract
+      const names = noPath.map(b => b._customLabel || b.verbatim_text?.slice(0, 40) || b.quote_id).join(', ');
+      setJobStatus({
+        status: 'partial_warning',
+        error_message: `${noPath.length} clip${noPath.length !== 1 ? 's' : ''} have no video path and will be skipped: ${names}`,
+      });
+      // Continue — extract the ones that do have paths
+    }
+
     if (DEMO) {
       await new Promise(r => setTimeout(r, 800));
       setJobId('demo-job-001');
@@ -1081,6 +1111,12 @@ function BasketTab({ projectId, basket, setBasket }) {
                   ✓ {jobStatus.clip_count} clips saved to Dropbox
                 </p>
               )}
+              {jobStatus.status === 'partial_warning' && (
+                <p style={{ fontFamily: "'Poppins', sans-serif", fontSize: 10,
+                  color: '#854D0E', marginTop: 8, lineHeight: 1.5 }}>
+                  ⚠ {jobStatus.error_message}
+                </p>
+              )}
               {jobStatus.status === 'failed' && (
                 <p style={{ fontFamily: "'Poppins', sans-serif", fontSize: 11,
                   color: DM.red, marginTop: 8 }}>
@@ -1200,17 +1236,18 @@ function TranscriptReader({ transcript, basket, setBasket, onBack }) {
   const [segments, setSegments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [popover, setPopover] = useState(null); // { x, y, startMs, endMs, selectedText }
+  const [popover, setPopover] = useState(null);
   const [clipLabel, setClipLabel] = useState('');
   const [addedId, setAddedId] = useState(null);
+  // dropboxPath: live value fetched from DB, overrides potentially-stale prop
+  const [dropboxPath, setDropboxPath] = useState(transcript.dropbox_path || null);
   const containerRef = useRef(null);
   const labelInputRef = useRef(null);
 
-  // Fetch raw transcript text
+  // Fetch raw transcript text — also refreshes dropbox_path from DB
   useEffect(() => {
     setLoading(true); setError(null);
     if (DEMO) {
-      // In demo: use a stub
       setSegments(parseTranscriptSegments(
         `[00:00:05] Interviewer: Thank you for joining us.\n[00:00:18] ${transcript.participant_label || 'Participant'}: Sure, happy to be here.\n[00:01:02] Interviewer: Tell me about your experience.\n[00:01:10] ${transcript.participant_label || 'Participant'}: It's been quite a journey honestly. I've changed my approach a lot over the years.`
       ));
@@ -1222,6 +1259,10 @@ function TranscriptReader({ transcript, basket, setBasket, onBack }) {
       .then(d => {
         if (d.transcript?.raw_text) {
           setSegments(parseTranscriptSegments(d.transcript.raw_text));
+          // Always use the DB value — it may be newer than the prop snapshot
+          if (d.transcript.dropbox_path) {
+            setDropboxPath(d.transcript.dropbox_path);
+          }
         } else {
           setError('No transcript text available — transcript may not be indexed yet.');
         }
@@ -1305,7 +1346,7 @@ function TranscriptReader({ transcript, basket, setBasket, onBack }) {
         transcript_id: transcript.id,
         filename: transcript.filename,
         participant_label: transcript.participant_label,
-        dropbox_video_path: transcript.dropbox_path,
+        dropbox_video_path: dropboxPath,   // live DB value, not stale prop
         market: transcript.market,
         segment_name: transcript.segment_name,
       },
@@ -1314,7 +1355,7 @@ function TranscriptReader({ transcript, basket, setBasket, onBack }) {
     setAddedId(newItem.quote_id);
     setTimeout(() => setAddedId(null), 1800);
     dismissPopover();
-  }, [popover, clipLabel, transcript, setBasket, dismissPopover]);
+  }, [popover, clipLabel, transcript, dropboxPath, setBasket, dismissPopover]);
 
   // Escape closes popover
   useEffect(() => {
@@ -1403,6 +1444,18 @@ function TranscriptReader({ transcript, basket, setBasket, onBack }) {
                 Select any text to add as a clip. Yellow sections are already in your basket.
               </span>
             </div>
+
+            {/* No video path warning */}
+            {!dropboxPath && (
+              <div style={{ padding: '10px 32px', background: '#FEF9C3',
+                borderBottom: `1px solid #FDE68A`,
+                display: 'flex', alignItems: 'center', gap: 8 }}>
+                <AlertTriangle size={12} color="#854D0E" style={{ flexShrink: 0 }} />
+                <span style={{ fontFamily: "'Poppins', sans-serif", fontSize: 11, color: '#854D0E' }}>
+                  No Dropbox video path set for this transcript — clips can be added to the basket but <strong>cannot be extracted</strong> until a video path is set via the participant manifest.
+                </span>
+              </div>
+            )}
 
             {/* Transcript */}
             <div ref={containerRef} onMouseUp={handleMouseUp}
