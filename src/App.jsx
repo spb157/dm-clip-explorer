@@ -1878,7 +1878,9 @@ function TranscriptsTab({ projectId, transcripts, setTranscripts, onAddToBasket,
   const [batchStatus, setBatchStatus] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [deleting, setDeleting] = useState(null);
-  const [clipPicker, setClipPicker] = useState(null); // transcript id with picker open
+  const [clipPicker, setClipPicker] = useState(null);
+  const [editPath, setEditPath] = useState(null);   // transcript id with path editor open
+  const [editPathValue, setEditPathValue] = useState(''); // transcript id with picker open
 
   // Manifest state
   const [manifestRows, setManifestRows] = useState(null);
@@ -2017,6 +2019,21 @@ function TranscriptsTab({ projectId, transcripts, setTranscripts, onAddToBasket,
     };
     poll();
   }, [projectId]);
+
+  const savePath = async (transcriptId) => {
+    let dp = editPathValue.trim();
+    if (!dp) return;
+    if (!dp.startsWith('/')) dp = '/' + dp;
+    if (!/\.\w{2,4}$/.test(dp)) dp = dp + '.mp4';
+    try {
+      await fetch(
+        `${API_URL_RESOLVED}/api/projects/${projectId}/transcripts/${transcriptId}/dropbox-path`,
+        { method: 'PATCH', headers: hdrs(), body: JSON.stringify({ dropbox_path: dp }) }
+      );
+      setTranscripts(ts => ts.map(t => t.id === transcriptId ? { ...t, dropbox_path: dp } : t));
+    } catch {}
+    setEditPath(null); setEditPathValue('');
+  };
 
   // ── Delete ──────────────────────────────────────────────────
   const deleteTranscript = async (transcriptId) => {
@@ -2297,7 +2314,13 @@ function TranscriptsTab({ projectId, transcripts, setTranscripts, onAddToBasket,
                 {t.participant_label && <Label>{t.participant_label}</Label>}
                 {t.market && <Label style={{ color: DM.grey600 }}>{t.market}</Label>}
                 {t.segment_name && <Label style={{ color: DM.grey600 }}>{t.segment_name}</Label>}
-                {t.dropbox_path && <Label style={{ color: DM.grey200 }}>{t.dropbox_path}</Label>}
+                {t.dropbox_path
+                  ? <Label style={{ color: DM.grey200 }}>{t.dropbox_path}</Label>
+                  : <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 9,
+                      color: DM.red, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                      no video path
+                    </span>
+                }
                 {t.indexing_status === 'processing' && (
                   <Label style={{ color: '#B7860A', display: 'flex', alignItems: 'center', gap: 4 }}>
                     <Spinner size={8} color="#B7860A" />
@@ -2341,6 +2364,17 @@ function TranscriptsTab({ projectId, transcripts, setTranscripts, onAddToBasket,
                   onMouseLeave={e => { e.currentTarget.style.borderColor = DM.grey200; e.currentTarget.style.background = 'none'; }}>
                   <BookOpen size={11} /> Read
                 </button>
+                <button
+                  title="Set video path"
+                  onClick={() => { setEditPath(p => p === t.id ? null : t.id); setEditPathValue(t.dropbox_path || ''); }}
+                  style={{ background: editPath === t.id ? DM.yellowLight : (t.dropbox_path ? 'none' : '#FEF9C3'),
+                    border: `1px solid ${editPath === t.id ? DM.yellow : (t.dropbox_path ? DM.grey200 : '#FDE68A')}`,
+                    borderRadius: 4, cursor: 'pointer',
+                    color: editPath === t.id ? DM.black : (t.dropbox_path ? DM.grey400 : '#854D0E'),
+                    padding: '3px 8px', display: 'flex', alignItems: 'center', gap: 4,
+                    fontFamily: "'Poppins', sans-serif", fontSize: 10, transition: 'all 0.15s' }}>
+                  <FileText size={11} /> {t.dropbox_path ? 'Path' : 'Set path'}
+                </button>
                 <button onClick={() => setClipPicker(p => p === t.id ? null : t.id)}
                   title="Create custom clip"
                   style={{ background: clipPicker === t.id ? DM.yellowLight : 'none',
@@ -2361,6 +2395,42 @@ function TranscriptsTab({ projectId, transcripts, setTranscripts, onAddToBasket,
               </div>
             )}
           </div>
+
+          {/* Inline path editor */}
+          {editPath === t.id && (
+            <div style={{ marginTop: -6, marginBottom: 8,
+              border: `1.5px solid ${DM.yellow}`, borderTop: 'none',
+              borderRadius: '0 0 4px 4px', background: DM.yellowLight,
+              padding: '12px 16px', animation: 'fadeUp 0.15s ease' }}>
+              <Label style={{ display: 'block', marginBottom: 6 }}>Dropbox video path</Label>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input
+                  autoFocus
+                  value={editPathValue}
+                  onChange={e => setEditPathValue(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') savePath(t.id); if (e.key === 'Escape') { setEditPath(null); setEditPathValue(''); } }}
+                  placeholder="/HSBC/Cast/UK AM Peter.mp4"
+                  style={{ flex: 1, padding: '7px 10px',
+                    border: `1.5px solid ${DM.grey200}`, borderRadius: 4,
+                    fontFamily: "'Space Mono', monospace", fontSize: 11,
+                    background: DM.white, outline: 'none', boxSizing: 'border-box' }}
+                />
+                <PrimaryBtn onClick={() => savePath(t.id)}
+                  style={{ padding: '7px 16px', fontSize: 11, whiteSpace: 'nowrap' }}>
+                  Save path
+                </PrimaryBtn>
+                <button onClick={() => { setEditPath(null); setEditPathValue(''); }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer',
+                    color: DM.grey400, padding: 4 }}>
+                  <X size={13} />
+                </button>
+              </div>
+              <p style={{ fontFamily: "'Poppins', sans-serif", fontSize: 10, fontWeight: 300,
+                color: DM.grey600, marginTop: 6, lineHeight: 1.4 }}>
+                Full path from your Dropbox app folder root — e.g. <code style={{ fontFamily: "'Space Mono', monospace" }}>/HSBC/Cast/UK AM Peter.mp4</code>
+              </p>
+            </div>
+          )}
 
           {/* Custom clip picker — inline below transcript row */}
           {clipPicker === t.id && (
