@@ -623,31 +623,162 @@ function QuoteCard({ quote, inBasket, onAdd, highlight }) {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// CLIP BASKET TAB
+// CLIP BASKET TAB — with per-clip timecode editing
 // ────────────────────────────────────────────────────────────────────────────
+
+// Parse "MM:SS" or "HH:MM:SS" string → milliseconds
+function tcToMs(str) {
+  if (!str) return 0;
+  const parts = String(str).trim().split(':').map(Number);
+  if (parts.length === 2) return (parts[0] * 60 + parts[1]) * 1000;
+  if (parts.length === 3) return (parts[0] * 3600 + parts[1] * 60 + parts[2]) * 1000;
+  return 0;
+}
+
+// Milliseconds → "MM:SS" or "HH:MM:SS" string for input display
+function msToTcStr(ms) {
+  const totalSec = Math.floor((ms || 0) / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+function BasketCard({ item, onUpdate, onRemove }) {
+  const [editing, setEditing] = useState(false);
+  const [startStr, setStartStr] = useState(msToTcStr(item.timecode?.start_ms));
+  const [endStr, setEndStr] = useState(msToTcStr(item.timecode?.end_ms));
+  const [padding, setPadding] = useState(item._padding ?? 500);
+
+  const applyEdit = () => {
+    const start_ms = tcToMs(startStr);
+    const end_ms   = tcToMs(endStr);
+    if (end_ms > start_ms) {
+      onUpdate({ timecode: { ...item.timecode, start_ms, end_ms }, _padding: padding });
+    }
+    setEditing(false);
+  };
+
+  const durationSec = Math.round(((item.timecode?.end_ms || 0) - (item.timecode?.start_ms || 0)) / 1000);
+
+  return (
+    <div style={{ border: `1.5px solid ${editing ? DM.yellow : DM.grey100}`, borderRadius: 4,
+      marginBottom: 10, background: DM.white, overflow: 'hidden',
+      transition: 'border-color 0.15s', animation: 'fadeUp 0.2s ease' }}>
+      <div style={{ padding: '14px 16px', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            {item.source?.participant_label && <Tag>{item.source.participant_label}</Tag>}
+            {item._customLabel && <Tag style={{ background: DM.yellowLight }}>{item._customLabel}</Tag>}
+            <Tag style={{ background: DM.grey50, fontFamily: "'Space Mono', monospace", fontSize: 9 }}>
+              {fmt(item.timecode?.start_ms)} → {fmt(item.timecode?.end_ms)}
+            </Tag>
+            <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 9, color: DM.grey400 }}>
+              {durationSec}s
+            </span>
+            {item.source?.filename && (
+              <Tag style={{ background: DM.grey50 }}>{item.source.filename}</Tag>
+            )}
+          </div>
+          <p style={{ fontFamily: "'Poppins', sans-serif", fontSize: 12, fontWeight: 300,
+            color: DM.nearBlack, lineHeight: 1.7, margin: 0 }}>
+            {item._customLabel ? `Custom clip — ${item._customLabel}` : `"${item.verbatim_text}"`}
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+          <button onClick={() => { setEditing(e => !e); setStartStr(msToTcStr(item.timecode?.start_ms)); setEndStr(msToTcStr(item.timecode?.end_ms)); }}
+            style={{ background: editing ? DM.yellowLight : 'none',
+              border: `1px solid ${editing ? DM.yellow : DM.grey200}`,
+              borderRadius: 4, cursor: 'pointer', color: DM.grey600,
+              padding: '4px 8px', fontFamily: "'Poppins', sans-serif",
+              fontSize: 10, fontWeight: 500, transition: 'all 0.15s' }}>
+            Edit clip
+          </button>
+          <button onClick={onRemove} style={{ background: 'none', border: 'none',
+            cursor: 'pointer', color: DM.grey400, padding: 4 }}>
+            <X size={14} />
+          </button>
+        </div>
+      </div>
+
+      {editing && (
+        <div style={{ padding: '12px 16px 16px', background: DM.grey50,
+          borderTop: `1px solid ${DM.grey100}`, animation: 'fadeUp 0.15s ease' }}>
+          <div style={{ display: 'flex', gap: 12, marginBottom: 12, alignItems: 'flex-end' }}>
+            <div style={{ flex: 1 }}>
+              <Label style={{ display: 'block', marginBottom: 5 }}>Start timecode</Label>
+              <input value={startStr} onChange={e => setStartStr(e.target.value)}
+                placeholder="MM:SS or HH:MM:SS"
+                style={{ width: '100%', padding: '7px 10px', border: `1.5px solid ${DM.grey200}`,
+                  borderRadius: 4, fontFamily: "'Space Mono', monospace", fontSize: 11,
+                  boxSizing: 'border-box', outline: 'none' }} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <Label style={{ display: 'block', marginBottom: 5 }}>End timecode</Label>
+              <input value={endStr} onChange={e => setEndStr(e.target.value)}
+                placeholder="MM:SS or HH:MM:SS"
+                style={{ width: '100%', padding: '7px 10px', border: `1.5px solid ${DM.grey200}`,
+                  borderRadius: 4, fontFamily: "'Space Mono', monospace", fontSize: 11,
+                  boxSizing: 'border-box', outline: 'none' }} />
+            </div>
+          </div>
+          <div style={{ marginBottom: 12 }}>
+            <Label style={{ display: 'block', marginBottom: 5 }}>Padding — {padding}ms</Label>
+            <input type="range" min={0} max={2000} step={100} value={padding}
+              onChange={e => setPadding(Number(e.target.value))}
+              style={{ width: '100%', accentColor: DM.yellow }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between',
+              fontFamily: "'Space Mono', monospace", fontSize: 9, color: DM.grey400 }}>
+              <span>0ms</span><span>2000ms</span>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <PrimaryBtn onClick={applyEdit} style={{ padding: '7px 18px', fontSize: 11 }}>
+              Apply
+            </PrimaryBtn>
+            <button onClick={() => setEditing(false)}
+              style={{ padding: '7px 14px', borderRadius: 4, border: `1px solid ${DM.grey200}`,
+                background: 'none', fontFamily: "'Poppins', sans-serif",
+                fontSize: 11, color: DM.grey600, cursor: 'pointer' }}>
+              Cancel
+            </button>
+            <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 9,
+              color: DM.grey400, alignSelf: 'center', marginLeft: 4 }}>
+              {tcToMs(endStr) > tcToMs(startStr)
+                ? `${Math.round((tcToMs(endStr) - tcToMs(startStr)) / 1000)}s clip`
+                : 'end must be after start'}
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BasketTab({ projectId, basket, setBasket }) {
-  const [outputFolder, setOutputFolder] = useState("/clips");
-  const [paddingMs, setPaddingMs] = useState(500);
+  const [outputFolder, setOutputFolder] = useState('/clips');
   const [jobId, setJobId] = useState(null);
   const [jobStatus, setJobStatus] = useState(null);
   const [extracting, setExtracting] = useState(false);
 
   const exportCSV = () => {
     const cols = [
-      { key: "quote_id", label: "Quote ID" },
-      { key: "verbatim_text", label: "Verbatim Text" },
-      { key: "speaker", label: "Speaker" },
-      { key: "start_fmt", label: "Start Timecode" },
-      { key: "end_fmt", label: "End Timecode" },
-      { key: "participant_label", label: "Participant" },
-      { key: "market", label: "Market" },
-      { key: "segment", label: "Segment" },
-      { key: "filename", label: "Source File" },
+      { key: 'quote_id', label: 'Quote ID' },
+      { key: 'verbatim_text', label: 'Verbatim Text' },
+      { key: 'speaker', label: 'Speaker' },
+      { key: 'start_fmt', label: 'Start Timecode' },
+      { key: 'end_fmt', label: 'End Timecode' },
+      { key: 'participant_label', label: 'Participant' },
+      { key: 'market', label: 'Market' },
+      { key: 'segment', label: 'Segment' },
+      { key: 'filename', label: 'Source File' },
     ];
     const rows = basket.map(r => ({
-      ...r, start_fmt: fmt(r.timecode?.start_ms), end_fmt: fmt(r.timecode?.end_ms),
+      ...r,
+      start_fmt: fmt(r.timecode?.start_ms), end_fmt: fmt(r.timecode?.end_ms),
       participant_label: r.source?.participant_label, filename: r.source?.filename,
-      market: r.source?.market ?? "", segment: r.source?.segment_name ?? "",
+      market: r.source?.market ?? '', segment: r.source?.segment_name ?? '',
     }));
     downloadCSV(toCSV(rows, cols), `clip_basket_${Date.now()}.csv`);
   };
@@ -656,17 +787,22 @@ function BasketTab({ projectId, basket, setBasket }) {
     setExtracting(true);
     if (DEMO) {
       await new Promise(r => setTimeout(r, 800));
-      setJobId("demo-job-001");
-      setJobStatus({ status: "queued", clip_count: basket.length });
+      setJobId('demo-job-001');
+      setJobStatus({ status: 'queued', clip_count: basket.length });
       setExtracting(false); return;
     }
     try {
+      // Build clip specs — each item can have custom timecodes and padding
+      const clips = basket.map(b => ({
+        quote_id: b.quote_id,
+        start_ms: b.timecode?.start_ms,
+        end_ms: b.timecode?.end_ms,
+        padding_ms: b._padding ?? 500,
+        dropbox_video_path: b.source?.dropbox_video_path,
+      }));
       const r = await fetch(`${API_URL_RESOLVED}/api/projects/${projectId}/clips`, {
-        method: "POST", headers: hdrs(),
-        body: JSON.stringify({
-          quote_ids: basket.map(b => b.quote_id),
-          output_folder: outputFolder, padding_ms: paddingMs
-        })
+        method: 'POST', headers: hdrs(),
+        body: JSON.stringify({ clips, output_folder: outputFolder })
       });
       const d = await r.json();
       setJobId(d.job_id);
@@ -682,129 +818,100 @@ function BasketTab({ projectId, basket, setBasket }) {
         const r = await fetch(`${API_URL_RESOLVED}/api/clips/${id}`, { headers: hdrs() });
         const d = await r.json();
         setJobStatus(d.job);
-        if (d.job.status === "complete" || d.job.status === "failed") return;
+        if (d.job.status === 'complete' || d.job.status === 'failed') return;
         setTimeout(poll, 3000);
       } catch {}
     };
     poll();
   }, []);
 
+  const updateItem = (quoteId, updates) => {
+    setBasket(b => b.map(item => item.quote_id === quoteId ? { ...item, ...updates } : item));
+  };
+
   return (
-    <div style={{ flex: 1, overflow: "auto", display: "flex" }}>
+    <div style={{ flex: 1, overflow: 'auto', display: 'flex' }}>
       {/* Quote list */}
-      <div style={{ flex: 1, padding: "20px 24px", overflowY: "auto" }}>
-        <div style={{ display: "flex", justifyContent: "space-between",
-          alignItems: "center", marginBottom: 16 }}>
-          <Label>{basket.length} CLIP{basket.length !== 1 ? "S" : ""} IN BASKET</Label>
+      <div style={{ flex: 1, padding: '20px 24px', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between',
+          alignItems: 'center', marginBottom: 16 }}>
+          <Label>{basket.length} CLIP{basket.length !== 1 ? 'S' : ''} IN BASKET</Label>
           {basket.length > 0 && (
             <SmallBtn icon={Download} onClick={exportCSV}>Export CSV</SmallBtn>
           )}
         </div>
 
         {basket.length === 0 && (
-          <div style={{ textAlign: "center", padding: "60px 20px" }}>
-            <Scissors size={28} color={DM.grey200} style={{ margin: "0 auto 12px" }} />
-            <p style={{ fontFamily: "'Poppins', sans-serif", fontSize: 13,
-              color: DM.grey400 }}>
-              Add quotes from the Search tab to queue clips for extraction
+          <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+            <Scissors size={28} color={DM.grey200} style={{ margin: '0 auto 12px' }} />
+            <p style={{ fontFamily: "'Poppins', sans-serif", fontSize: 13, color: DM.grey400 }}>
+              Add quotes from Search, or create custom clips from the Transcripts tab
             </p>
           </div>
         )}
 
-        {basket.map((r, i) => (
-          <div key={r.quote_id} style={{ border: `1.5px solid ${DM.grey100}`,
-            borderRadius: 4, padding: "14px 16px", marginBottom: 10,
-            display: "flex", gap: 12, alignItems: "flex-start",
-            animation: "fadeUp 0.2s ease" }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-                {r.source?.participant_label && <Tag>{r.source.participant_label}</Tag>}
-                <Tag style={{ background: DM.grey50,
-                  fontFamily: "'Space Mono', monospace", fontSize: 9 }}>
-                  {fmt(r.timecode?.start_ms)} → {fmt(r.timecode?.end_ms)}
-                </Tag>
-                <Tag style={{ background: DM.grey50 }}>{r.source?.filename}</Tag>
-              </div>
-              <p style={{ fontFamily: "'Poppins', sans-serif", fontSize: 12,
-                fontWeight: 300, color: DM.nearBlack, lineHeight: 1.7, margin: 0 }}>
-                "{r.verbatim_text}"
-              </p>
-            </div>
-            <button onClick={() => setBasket(b => b.filter(x => x.quote_id !== r.quote_id))}
-              style={{ background: "none", border: "none", cursor: "pointer",
-                color: DM.grey400, padding: 4, flexShrink: 0 }}>
-              <X size={14} />
-            </button>
-          </div>
+        {basket.map(item => (
+          <BasketCard key={item.quote_id} item={item}
+            onUpdate={updates => updateItem(item.quote_id, updates)}
+            onRemove={() => setBasket(b => b.filter(x => x.quote_id !== item.quote_id))} />
         ))}
       </div>
 
       {/* Extraction controls */}
       {basket.length > 0 && (
         <div style={{ width: 240, borderLeft: `1px solid ${DM.grey100}`,
-          padding: 20, flexShrink: 0, overflowY: "auto" }}>
-          <Label style={{ display: "block", marginBottom: 16 }}>Extract Settings</Label>
-
-          <div style={{ marginBottom: 14 }}>
-            <p style={{ fontFamily: "'Poppins', sans-serif", fontSize: 10,
-              fontWeight: 600, color: DM.grey600, marginBottom: 6 }}>
-              Dropbox output folder
-            </p>
-            <input value={outputFolder}
-              onChange={e => setOutputFolder(e.target.value)}
-              placeholder="/Project Name/output-clips"
-              style={{ width: "100%", padding: "8px 10px",
-                border: `1.5px solid ${DM.grey200}`, borderRadius: 4,
-                fontFamily: "'Space Mono', monospace", fontSize: 11,
-                boxSizing: "border-box", outline: "none" }} />
-            <p style={{ fontFamily: "'Poppins', sans-serif", fontSize: 10,
-              fontWeight: 300, color: DM.grey400, marginTop: 5, lineHeight: 1.4 }}>
-              Folder path inside your team Dropbox — not a URL.
-            </p>
-          </div>
+          padding: 20, flexShrink: 0, overflowY: 'auto' }}>
+          <Label style={{ display: 'block', marginBottom: 16 }}>Extract Settings</Label>
 
           <div style={{ marginBottom: 20 }}>
             <p style={{ fontFamily: "'Poppins', sans-serif", fontSize: 10,
               fontWeight: 600, color: DM.grey600, marginBottom: 6 }}>
-              Padding — {paddingMs}ms
+              Dropbox output folder
             </p>
-            <input type="range" min={0} max={2000} step={100}
-              value={paddingMs} onChange={e => setPaddingMs(Number(e.target.value))}
-              style={{ width: "100%", accentColor: DM.yellow }} />
-            <div style={{ display: "flex", justifyContent: "space-between",
-              fontFamily: "'Space Mono', monospace", fontSize: 9, color: DM.grey400 }}>
-              <span>0ms</span><span>2000ms</span>
-            </div>
+            <input value={outputFolder} onChange={e => setOutputFolder(e.target.value)}
+              placeholder="/Project Name/output-clips"
+              style={{ width: '100%', padding: '8px 10px', border: `1.5px solid ${DM.grey200}`,
+                borderRadius: 4, fontFamily: "'Space Mono', monospace", fontSize: 11,
+                boxSizing: 'border-box', outline: 'none' }} />
+            <p style={{ fontFamily: "'Poppins', sans-serif", fontSize: 10, fontWeight: 300,
+              color: DM.grey400, marginTop: 5, lineHeight: 1.4 }}>
+              Folder path inside your team Dropbox — not a URL.
+            </p>
           </div>
+
+          <p style={{ fontFamily: "'Poppins', sans-serif", fontSize: 10, fontWeight: 300,
+            color: DM.grey400, marginBottom: 16, lineHeight: 1.5 }}>
+            Per-clip timecodes and padding can be edited on each card in the basket.
+          </p>
 
           <PrimaryBtn onClick={extract}
             disabled={extracting || basket.length === 0 || !!jobId}
-            style={{ width: "100%", justifyContent: "center", fontSize: 12 }}>
+            style={{ width: '100%', justifyContent: 'center', fontSize: 12 }}>
             {extracting
               ? <><Spinner size={12} color={DM.black} /> Queuing…</>
-              : `Extract ${basket.length} clip${basket.length !== 1 ? "s" : ""}`}
+              : `Extract ${basket.length} clip${basket.length !== 1 ? 's' : ''}`}
           </PrimaryBtn>
 
           {jobStatus && (
-            <div style={{ marginTop: 16, padding: "12px 14px",
-              background: DM.grey50, borderRadius: 4, border: `1px solid ${DM.grey100}` }}>
-              <div style={{ display: "flex", justifyContent: "space-between",
-                alignItems: "center", marginBottom: 6 }}>
+            <div style={{ marginTop: 16, padding: '12px 14px', background: DM.grey50,
+              borderRadius: 4, border: `1px solid ${DM.grey100}` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between',
+                alignItems: 'center', marginBottom: 6 }}>
                 <Label>Job status</Label>
                 <StatusBadge status={jobStatus.status} />
               </div>
               <p style={{ fontFamily: "'Space Mono', monospace", fontSize: 9,
-                color: DM.grey400, wordBreak: "break-all" }}>{jobId}</p>
-              {jobStatus.status === "complete" && (
+                color: DM.grey400, wordBreak: 'break-all' }}>{jobId}</p>
+              {jobStatus.status === 'complete' && (
                 <p style={{ fontFamily: "'Poppins', sans-serif", fontSize: 11,
                   color: DM.green, marginTop: 8 }}>
                   ✓ {jobStatus.clip_count} clips saved to Dropbox
                 </p>
               )}
-              {jobStatus.status === "failed" && (
+              {jobStatus.status === 'failed' && (
                 <p style={{ fontFamily: "'Poppins', sans-serif", fontSize: 11,
                   color: DM.red, marginTop: 8 }}>
-                  {jobStatus.error_message || "Extraction failed"}
+                  {jobStatus.error_message || 'Extraction failed'}
                 </p>
               )}
             </div>
@@ -812,10 +919,10 @@ function BasketTab({ projectId, basket, setBasket }) {
 
           {jobId && (
             <button onClick={() => { setJobId(null); setJobStatus(null); setBasket([]); }}
-              style={{ marginTop: 12, width: "100%", background: "none",
+              style={{ marginTop: 12, width: '100%', background: 'none',
                 border: `1px solid ${DM.grey200}`, borderRadius: 4,
                 fontFamily: "'Poppins', sans-serif", fontSize: 10,
-                color: DM.grey400, padding: "7px 0", cursor: "pointer" }}>
+                color: DM.grey400, padding: '7px 0', cursor: 'pointer' }}>
               Clear basket &amp; start new
             </button>
           )}
@@ -993,7 +1100,113 @@ const StatusPip = ({ ok, label }) => (
   }}>{label}</span>
 );
 
-function TranscriptsTab({ projectId, transcripts, setTranscripts }) {
+// ── CustomClipPicker ─────────────────────────────────────────────────────────
+function CustomClipPicker({ transcript, onAdd, onClose }) {
+  const [startStr, setStartStr] = useState('');
+  const [endStr, setEndStr] = useState('');
+  const [label, setLabel] = useState('');
+  const [padding, setPadding] = useState(500);
+  const [error, setError] = useState('');
+
+  const handleAdd = () => {
+    const start_ms = tcToMs(startStr);
+    const end_ms   = tcToMs(endStr);
+    if (!startStr || !endStr) { setError('Both timecodes required'); return; }
+    if (end_ms <= start_ms)   { setError('End must be after start'); return; }
+    if (!transcript.dropbox_path) {
+      setError('No video path set — add via manifest first');
+      return;
+    }
+    const clip = {
+      quote_id: `custom_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+      verbatim_text: '',
+      _customLabel: label || `${transcript.participant_label || transcript.filename} ${startStr}–${endStr}`,
+      _padding: padding,
+      timecode: { start_ms, end_ms },
+      source: {
+        transcript_id: transcript.id,
+        filename: transcript.filename,
+        participant_label: transcript.participant_label,
+        dropbox_video_path: transcript.dropbox_path,
+        market: transcript.market,
+        segment_name: transcript.segment_name,
+      },
+    };
+    onAdd(clip);
+  };
+
+  const durationSec = startStr && endStr && tcToMs(endStr) > tcToMs(startStr)
+    ? Math.round((tcToMs(endStr) - tcToMs(startStr)) / 1000) : null;
+
+  return (
+    <div style={{ marginTop: -2, marginBottom: 8, border: `1.5px solid ${DM.yellow}`,
+      borderTop: 'none', borderRadius: '0 0 4px 4px',
+      background: DM.yellowLight, padding: '14px 16px',
+      animation: 'fadeUp 0.15s ease' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between',
+        alignItems: 'center', marginBottom: 12 }}>
+        <span style={{ fontFamily: "'Anton', sans-serif", fontSize: 12,
+          color: DM.black, letterSpacing: '0.02em' }}>CUSTOM CLIP</span>
+        <button onClick={onClose} style={{ background: 'none', border: 'none',
+          cursor: 'pointer', color: DM.grey400, padding: 2 }}>
+          <X size={13} />
+        </button>
+      </div>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 100 }}>
+          <Label style={{ display: 'block', marginBottom: 4 }}>Start</Label>
+          <input value={startStr} onChange={e => { setStartStr(e.target.value); setError(''); }}
+            placeholder="00:35:35"
+            style={{ width: '100%', padding: '7px 10px', border: `1.5px solid ${DM.grey200}`,
+              borderRadius: 4, fontFamily: "'Space Mono', monospace", fontSize: 11,
+              boxSizing: 'border-box', outline: 'none', background: DM.white }} />
+        </div>
+        <div style={{ flex: 1, minWidth: 100 }}>
+          <Label style={{ display: 'block', marginBottom: 4 }}>End</Label>
+          <input value={endStr} onChange={e => { setEndStr(e.target.value); setError(''); }}
+            placeholder="00:36:12"
+            style={{ width: '100%', padding: '7px 10px', border: `1.5px solid ${DM.grey200}`,
+              borderRadius: 4, fontFamily: "'Space Mono', monospace", fontSize: 11,
+              boxSizing: 'border-box', outline: 'none', background: DM.white }} />
+        </div>
+        <div style={{ flex: 2, minWidth: 160 }}>
+          <Label style={{ display: 'block', marginBottom: 4 }}>Label (optional)</Label>
+          <input value={label} onChange={e => setLabel(e.target.value)}
+            placeholder="e.g. Risk aversion section"
+            style={{ width: '100%', padding: '7px 10px', border: `1.5px solid ${DM.grey200}`,
+              borderRadius: 4, fontFamily: "'Poppins', sans-serif", fontSize: 11,
+              boxSizing: 'border-box', outline: 'none', background: DM.white }} />
+        </div>
+      </div>
+      <div style={{ marginBottom: 12 }}>
+        <Label style={{ display: 'block', marginBottom: 4 }}>Padding — {padding}ms</Label>
+        <input type="range" min={0} max={2000} step={100} value={padding}
+          onChange={e => setPadding(Number(e.target.value))}
+          style={{ width: '100%', accentColor: DM.yellow }} />
+      </div>
+      {error && (
+        <p style={{ fontFamily: "'Poppins', sans-serif", fontSize: 10,
+          color: DM.red, marginBottom: 8 }}>{error}</p>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <PrimaryBtn onClick={handleAdd} style={{ padding: '7px 20px', fontSize: 11,
+          display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Scissors size={11} /> Add to basket
+        </PrimaryBtn>
+        {durationSec && (
+          <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 9,
+            color: DM.grey600 }}>{durationSec}s clip</span>
+        )}
+        {!transcript.dropbox_path && (
+          <span style={{ fontFamily: "'Poppins', sans-serif", fontSize: 10,
+            color: '#856404' }}>⚠ No video path set</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TranscriptsTab({ projectId, transcripts, setTranscripts, onAddToBasket }) {
   const [queue, setQueue] = useState([]);          // files being cleaned/staged
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ done: 0, total: 0 });
@@ -1001,6 +1214,7 @@ function TranscriptsTab({ projectId, transcripts, setTranscripts }) {
   const [batchStatus, setBatchStatus] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [deleting, setDeleting] = useState(null);
+  const [clipPicker, setClipPicker] = useState(null); // transcript id with picker open
 
   // Manifest state
   const [manifestRows, setManifestRows] = useState(null);
@@ -1421,6 +1635,15 @@ function TranscriptsTab({ projectId, transcripts, setTranscripts }) {
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
                 <StatusBadge status={t.indexing_status} />
+                <button onClick={() => setClipPicker(p => p === t.id ? null : t.id)}
+                  title="Create custom clip"
+                  style={{ background: clipPicker === t.id ? DM.yellowLight : 'none',
+                    border: `1px solid ${clipPicker === t.id ? DM.yellow : DM.grey200}`,
+                    borderRadius: 4, cursor: 'pointer', color: clipPicker === t.id ? DM.black : DM.grey400,
+                    padding: '3px 8px', display: 'flex', alignItems: 'center', gap: 4,
+                    fontFamily: "'Poppins', sans-serif", fontSize: 10, transition: 'all 0.15s' }}>
+                  <Scissors size={11} />
+                </button>
                 <button onClick={() => setConfirmDelete(t.id)} title="Delete transcript"
                   style={{ background: 'none', border: 'none', cursor: 'pointer',
                     color: DM.grey200, padding: 4, display: 'flex', alignItems: 'center',
@@ -1432,6 +1655,18 @@ function TranscriptsTab({ projectId, transcripts, setTranscripts }) {
               </div>
             )}
           </div>
+
+          {/* Custom clip picker — inline below transcript row */}
+          {clipPicker === t.id && (
+            <CustomClipPicker
+              transcript={t}
+              onAdd={(clip) => {
+                onAddToBasket(clip);
+                setClipPicker(null);
+              }}
+              onClose={() => setClipPicker(null)}
+            />
+          )}
         ))}
       </div>
 
@@ -1603,7 +1838,8 @@ export default function App() {
             )}
             {tab === "transcripts" && (
               <TranscriptsTab projectId={project.id}
-                transcripts={transcripts} setTranscripts={setTranscripts} />
+                transcripts={transcripts} setTranscripts={setTranscripts}
+                onAddToBasket={(clip) => { setBasket(b => [...b, clip]); setTab('basket'); }} />
             )}
           </div>
         </>
