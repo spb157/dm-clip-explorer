@@ -1110,14 +1110,64 @@ function BasketTab({ projectId, basket, setBasket }) {
 // ────────────────────────────────────────────────────────────────────────────
 
 function parseTimecodeMs(tc) {
+  // VTT/SRT: HH:MM:SS.mmm or HH:MM:SS,mmm (no brackets)
+  const mVTT = tc.match(/(\d{1,2}):(\d{2}):(\d{2})[.,](\d+)/);
+  if (mVTT) {
+    const ms = (parseInt(mVTT[1]) * 3600 + parseInt(mVTT[2]) * 60 + parseInt(mVTT[3])) * 1000;
+    return ms + Math.round(parseInt(mVTT[4].padEnd(3,'0').slice(0,3)));
+  }
+  // Bracket: [HH:MM:SS]
   const m3 = tc.match(/(?:^|\[)(\d{1,2}):(\d{2}):(\d{2})(?:\]|$)/);
   if (m3) return (parseInt(m3[1]) * 3600 + parseInt(m3[2]) * 60 + parseInt(m3[3])) * 1000;
+  // Bracket: [MM:SS]
   const m2 = tc.match(/(?:^|\[)(\d{1,2}):(\d{2})(?:\]|$)/);
   if (m2) return (parseInt(m2[1]) * 60 + parseInt(m2[2])) * 1000;
   return null;
 }
 
 function parseTranscriptSegments(rawText) {
+  // Detect VTT/SRT format by presence of --> cue lines
+  const isVTT = /\d{2}:\d{2}:\d{2}[.,]\d+\s*-->/.test(rawText);
+  if (isVTT) return parseVTTSegments(rawText);
+  return parseInlineSegments(rawText);
+}
+
+// VTT/SRT: cue number → timecode range → content lines
+function parseVTTSegments(rawText) {
+  const lines = rawText.split('\n');
+  const segments = [];
+  let cueStartMs = null;
+  let cueEndMs   = null;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line || line === 'WEBVTT') continue;
+    // Cue number line — plain integer
+    if (/^\d+$/.test(line)) continue;
+    // Timecode range: 00:00:06.939 --> 00:00:08.159
+    const tcMatch = line.match(/^(\d{1,2}:\d{2}:\d{2}[.,]\d+)\s*-->\s*(\d{1,2}:\d{2}:\d{2}[.,]\d+)/);
+    if (tcMatch) {
+      cueStartMs = parseTimecodeMs(tcMatch[1]);
+      cueEndMs   = parseTimecodeMs(tcMatch[2]);
+      continue;
+    }
+    // Content line
+    const speakerM = line.match(/^([A-Z][^:]{0,30}):\s*(.+)/);
+    segments.push({
+      idx: segments.length,
+      ms:    cueStartMs,
+      endMs: cueEndMs,
+      timecodeStr: cueStartMs != null ? fmt(cueStartMs) : null,
+      speaker: speakerM ? speakerM[1] : null,
+      text:    speakerM ? speakerM[2] : line,
+      isInterviewer: speakerM && /interviewer|moderator|facilitator|int\b|mod\b/i.test(speakerM[1]),
+    });
+  }
+  return segments;
+}
+
+// Inline bracket timecodes: [MM:SS] or [HH:MM:SS] embedded in lines
+function parseInlineSegments(rawText) {
   const lines = rawText.split('\n');
   const segments = [];
   const tcRe = /\[(\d{1,2}:\d{2}(?::\d{2})?)\]/;
@@ -1138,7 +1188,7 @@ function parseTranscriptSegments(rawText) {
       isInterviewer: speakerM && /interviewer|moderator|facilitator|int\b|mod\b/i.test(speakerM[1]),
     });
   }
-  // Infer endMs: next segment's ms, or start + 30s
+  // Infer endMs from next segment's start
   for (let i = 0; i < segments.length; i++) {
     const next = segments.find((s, j) => j > i && s.ms !== null);
     segments[i].endMs = next ? next.ms : (segments[i].ms != null ? segments[i].ms + 30000 : null);
@@ -1302,10 +1352,12 @@ function TranscriptReader({ transcript, basket, setBasket, onBack }) {
         <span style={{ fontFamily: "'Anton', sans-serif", fontSize: 14, color: DM.black }}>
           CLIP EXPLORER
         </span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 2 }}>
-          <BookOpen size={12} color={DM.grey400} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 2,
+          minWidth: 0, flex: 1, overflow: 'hidden' }}>
+          <BookOpen size={12} color={DM.grey400} style={{ flexShrink: 0 }} />
           <span style={{ fontFamily: "'Poppins', sans-serif", fontSize: 12,
-            fontWeight: 500, color: DM.grey600 }}>
+            fontWeight: 500, color: DM.grey600,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {transcript.participant_label || transcript.filename}
           </span>
         </div>
