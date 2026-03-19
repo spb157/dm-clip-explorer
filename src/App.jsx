@@ -562,6 +562,9 @@ function QuoteCard({ quote, inBasket, onAdd, highlight }) {
             {quote.speaker && (
               <Tag style={{ background: DM.grey50 }}>{quote.speaker}</Tag>
             )}
+            {quote.match_type === 'concept' && (
+              <Tag style={{ background: DM.grey50, color: DM.grey400, fontSize: 9 }}>semantic match</Tag>
+            )}
             <Tag style={{ background: DM.grey50, fontFamily: "'Space Mono', monospace",
               fontSize: 9 }}>
               {fmt(quote.timecode?.start_ms)} → {fmt(quote.timecode?.end_ms)}
@@ -708,6 +711,30 @@ function BasketCard({ item, onUpdate, onRemove }) {
           <div style={{ display: 'flex', gap: 12, marginBottom: 12, alignItems: 'flex-end' }}>
             <div style={{ flex: 1 }}>
               <Label style={{ display: 'block', marginBottom: 5 }}>Start timecode</Label>
+              <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 5 }}>
+                {[-60, -30, -15].map(s => (
+                  <button key={s} onClick={() => {
+                    const ms = Math.max(0, tcToMs(startStr) + s * 1000);
+                    setStartStr(msToTcStr(ms));
+                  }} style={{ padding: '3px 6px', borderRadius: 3, border: `1px solid ${DM.grey200}`,
+                    background: 'none', fontFamily: "'Space Mono', monospace", fontSize: 9,
+                    color: DM.grey600, cursor: 'pointer', flexShrink: 0 }}>
+                    {s}s
+                  </button>
+                ))}
+                <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 9,
+                  color: DM.grey400, flex: 1, textAlign: 'center' }}>start</span>
+                {[+15, +30, +60].map(s => (
+                  <button key={s} onClick={() => {
+                    const ms = tcToMs(startStr) + s * 1000;
+                    setStartStr(msToTcStr(ms));
+                  }} style={{ padding: '3px 6px', borderRadius: 3, border: `1px solid ${DM.grey200}`,
+                    background: 'none', fontFamily: "'Space Mono', monospace", fontSize: 9,
+                    color: DM.grey600, cursor: 'pointer', flexShrink: 0 }}>
+                    +{s}s
+                  </button>
+                ))}
+              </div>
               <input value={startStr} onChange={e => setStartStr(e.target.value)}
                 placeholder="MM:SS or HH:MM:SS"
                 style={{ width: '100%', padding: '7px 10px', border: `1.5px solid ${DM.grey200}`,
@@ -716,6 +743,30 @@ function BasketCard({ item, onUpdate, onRemove }) {
             </div>
             <div style={{ flex: 1 }}>
               <Label style={{ display: 'block', marginBottom: 5 }}>End timecode</Label>
+              <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 5 }}>
+                {[-60, -30, -15].map(s => (
+                  <button key={s} onClick={() => {
+                    const ms = Math.max(0, tcToMs(endStr) + s * 1000);
+                    setEndStr(msToTcStr(ms));
+                  }} style={{ padding: '3px 6px', borderRadius: 3, border: `1px solid ${DM.grey200}`,
+                    background: 'none', fontFamily: "'Space Mono', monospace", fontSize: 9,
+                    color: DM.grey600, cursor: 'pointer', flexShrink: 0 }}>
+                    {s}s
+                  </button>
+                ))}
+                <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 9,
+                  color: DM.grey400, flex: 1, textAlign: 'center' }}>end</span>
+                {[+15, +30, +60].map(s => (
+                  <button key={s} onClick={() => {
+                    const ms = tcToMs(endStr) + s * 1000;
+                    setEndStr(msToTcStr(ms));
+                  }} style={{ padding: '3px 6px', borderRadius: 3, border: `1px solid ${DM.grey200}`,
+                    background: 'none', fontFamily: "'Space Mono', monospace", fontSize: 9,
+                    color: DM.grey600, cursor: 'pointer', flexShrink: 0 }}>
+                    +{s}s
+                  </button>
+                ))}
+              </div>
               <input value={endStr} onChange={e => setEndStr(e.target.value)}
                 placeholder="MM:SS or HH:MM:SS"
                 style={{ width: '100%', padding: '7px 10px', border: `1.5px solid ${DM.grey200}`,
