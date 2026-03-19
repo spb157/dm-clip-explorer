@@ -811,28 +811,65 @@ function BasketCard({ item, onUpdate, onRemove }) {
                 </div>
               )}
               {!contextLoading && contextText && (() => {
-                const verbatim = item.verbatim_text;
-                if (!verbatim) return <span>{contextText}</span>;
-                const idx = contextText.indexOf(verbatim);
-                if (idx === -1) return (
-                  <span>
-                    {contextText}
-                    <span style={{ display: 'block', marginTop: 8,
-                      borderTop: `1px solid ${DM.grey100}`, paddingTop: 8,
-                      background: DM.yellow, padding: '2px 4px', borderRadius: 2,
-                      color: DM.black, fontWeight: 500, fontStyle: 'normal' }}>
-                      "{verbatim}"
+                // Parse timecodes from transcript text to highlight current window
+                const startMs = tcToMs(startStr);
+                const endMs = tcToMs(endStr);
+                const tcRegex = /\[(\d{1,2}):(\d{2})(?::(\d{2}))?\]/g;
+
+                // Split text into segments tagged with their timecode
+                const segments = [];
+                let lastIndex = 0;
+                let currentMs = null;
+                let match;
+                const allMatches = [...contextText.matchAll(tcRegex)];
+
+                allMatches.forEach((m, i) => {
+                  const [full, a, b, c] = m;
+                  const ms = c
+                    ? (parseInt(a)*3600 + parseInt(b)*60 + parseInt(c))*1000
+                    : (parseInt(a)*60 + parseInt(b))*1000;
+                  if (m.index > lastIndex) {
+                    segments.push({ text: contextText.slice(lastIndex, m.index), ms: currentMs });
+                  }
+                  segments.push({ text: full, ms, isTimecode: true });
+                  currentMs = ms;
+                  lastIndex = m.index + full.length;
+                });
+                if (lastIndex < contextText.length) {
+                  segments.push({ text: contextText.slice(lastIndex), ms: currentMs });
+                }
+
+                const hasTimecodes = allMatches.length > 0;
+
+                if (!hasTimecodes) {
+                  // No timecodes — fall back to verbatim highlight
+                  const verbatim = item.verbatim_text;
+                  const idx = verbatim ? contextText.indexOf(verbatim) : -1;
+                  if (idx === -1) return <span style={{ color: DM.grey600 }}>{contextText}</span>;
+                  return (
+                    <span>
+                      <span style={{ color: DM.grey400 }}>{contextText.slice(0, idx)}</span>
+                      <mark style={{ background: DM.yellow, padding: '1px 3px', borderRadius: 2, color: DM.black, fontWeight: 500 }}>{verbatim}</mark>
+                      <span style={{ color: DM.grey400 }}>{contextText.slice(idx + verbatim.length)}</span>
                     </span>
-                  </span>
-                );
+                  );
+                }
+
                 return (
                   <span>
-                    <span style={{ color: DM.grey400 }}>{contextText.slice(0, idx)}</span>
-                    <mark style={{ background: DM.yellow, padding: '1px 3px',
-                      borderRadius: 2, color: DM.black, fontWeight: 500 }}>
-                      {verbatim}
-                    </mark>
-                    <span style={{ color: DM.grey400 }}>{contextText.slice(idx + verbatim.length)}</span>
+                    {segments.map((seg, i) => {
+                      const inWindow = seg.ms !== null && seg.ms >= startMs && seg.ms <= endMs;
+                      return (
+                        <span key={i} style={{
+                          background: inWindow ? DM.yellowLight : 'transparent',
+                          color: inWindow ? DM.black : DM.grey400,
+                          fontWeight: seg.isTimecode ? 600 : (inWindow ? 400 : 300),
+                          fontSize: seg.isTimecode ? 9 : 11,
+                          fontFamily: seg.isTimecode ? "'Space Mono', monospace" : "'Poppins', sans-serif",
+                          transition: 'background 0.15s, color 0.15s',
+                        }}>{seg.text}</span>
+                      );
+                    })}
                   </span>
                 );
               })()}
