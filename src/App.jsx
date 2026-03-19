@@ -653,6 +653,23 @@ function BasketCard({ item, onUpdate, onRemove }) {
   const [startStr, setStartStr] = useState(msToTcStr(item.timecode?.start_ms));
   const [endStr, setEndStr] = useState(msToTcStr(item.timecode?.end_ms));
   const [padding, setPadding] = useState(item._padding ?? 500);
+  const [contextText, setContextText] = useState(null);
+  const [contextLoading, setContextLoading] = useState(false);
+
+  const fetchContext = async () => {
+    const transcriptId = item.source?.transcript_id;
+    if (!transcriptId || DEMO) return;
+    setContextLoading(true);
+    try {
+      const r = await fetch(
+        `${API_URL_RESOLVED}/api/transcripts/${transcriptId}/context?start_ms=${item.timecode?.start_ms}&end_ms=${item.timecode?.end_ms}&window_ms=90000`,
+        { headers: hdrs() }
+      );
+      const d = await r.json();
+      setContextText(d.context_text || null);
+    } catch {}
+    setContextLoading(false);
+  };
 
   const applyEdit = () => {
     const start_ms = tcToMs(startStr);
@@ -690,7 +707,7 @@ function BasketCard({ item, onUpdate, onRemove }) {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-          <button onClick={() => { setEditing(e => !e); setStartStr(msToTcStr(item.timecode?.start_ms)); setEndStr(msToTcStr(item.timecode?.end_ms)); }}
+          <button onClick={() => { const opening = !editing; setEditing(e => !e); setStartStr(msToTcStr(item.timecode?.start_ms)); setEndStr(msToTcStr(item.timecode?.end_ms)); if (opening && !contextText) fetchContext(); }}
             style={{ background: editing ? DM.yellowLight : 'none',
               border: `1px solid ${editing ? DM.yellow : DM.grey200}`,
               borderRadius: 4, cursor: 'pointer', color: DM.grey600,
@@ -774,40 +791,71 @@ function BasketCard({ item, onUpdate, onRemove }) {
                   boxSizing: 'border-box', outline: 'none' }} />
             </div>
           </div>
-          {/* Mini transcript view */}
-          {(item.context?.before || item.verbatim_text || item.context?.after) && (
-            <div style={{ marginBottom: 12, border: `1px solid ${DM.grey200}`,
-              borderRadius: 4, overflow: 'hidden', fontSize: 11,
-              fontFamily: "'Poppins', sans-serif", lineHeight: 1.7 }}>
-              <div style={{ padding: '6px 10px', background: DM.grey50,
-                borderBottom: `1px solid ${DM.grey100}` }}>
-                <Label>Transcript context</Label>
-              </div>
-              <div style={{ padding: '10px 12px', maxHeight: 180, overflowY: 'auto' }}>
-                {item.context?.before && (
-                  <span style={{ color: DM.grey400, fontWeight: 300,
-                    fontStyle: 'italic' }}>…{item.context.before} </span>
-                )}
-                {item.verbatim_text && (
-                  <span style={{ background: DM.yellow, padding: '1px 3px',
-                    borderRadius: 2, color: DM.black, fontWeight: 500 }}>
-                    {item.verbatim_text}
-                  </span>
-                )}
-                {item.context?.after && (
-                  <span style={{ color: DM.grey400, fontWeight: 300,
-                    fontStyle: 'italic' }}> {item.context.after}…</span>
-                )}
-              </div>
-              <div style={{ padding: '5px 10px', background: DM.grey50,
-                borderTop: `1px solid ${DM.grey100}` }}>
-                <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 9,
-                  color: DM.grey400 }}>
-                  Nudge timecodes to include more surrounding content
-                </span>
-              </div>
+          {/* Transcript context window */}
+          <div style={{ marginBottom: 12, border: `1px solid ${DM.grey200}`,
+            borderRadius: 4, overflow: 'hidden', fontSize: 11,
+            fontFamily: "'Poppins', sans-serif", lineHeight: 1.7 }}>
+            <div style={{ padding: '6px 10px', background: DM.grey50,
+              borderBottom: `1px solid ${DM.grey100}`,
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Label>Transcript context</Label>
+              <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 9,
+                color: DM.grey400 }}>±90s around quote</span>
             </div>
-          )}
+            <div style={{ padding: '10px 12px', maxHeight: 220, overflowY: 'auto',
+              whiteSpace: 'pre-wrap', color: DM.grey600, fontWeight: 300, fontSize: 11 }}>
+              {contextLoading && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8,
+                  color: DM.grey400 }}>
+                  <Spinner size={10} /> Loading transcript…
+                </div>
+              )}
+              {!contextLoading && contextText && (() => {
+                const verbatim = item.verbatim_text;
+                if (!verbatim) return <span>{contextText}</span>;
+                const idx = contextText.indexOf(verbatim);
+                if (idx === -1) return (
+                  <span>
+                    {contextText}
+                    <span style={{ display: 'block', marginTop: 8,
+                      borderTop: `1px solid ${DM.grey100}`, paddingTop: 8,
+                      background: DM.yellow, padding: '2px 4px', borderRadius: 2,
+                      color: DM.black, fontWeight: 500, fontStyle: 'normal' }}>
+                      "{verbatim}"
+                    </span>
+                  </span>
+                );
+                return (
+                  <span>
+                    <span style={{ color: DM.grey400 }}>{contextText.slice(0, idx)}</span>
+                    <mark style={{ background: DM.yellow, padding: '1px 3px',
+                      borderRadius: 2, color: DM.black, fontWeight: 500 }}>
+                      {verbatim}
+                    </mark>
+                    <span style={{ color: DM.grey400 }}>{contextText.slice(idx + verbatim.length)}</span>
+                  </span>
+                );
+              })()}
+              {!contextLoading && !contextText && (
+                <span style={{ color: DM.grey400, fontStyle: 'italic' }}>
+                  {item.context?.before && `…${item.context.before} `}
+                  {item.verbatim_text && (
+                    <mark style={{ background: DM.yellow, padding: '1px 3px',
+                      borderRadius: 2, color: DM.black, fontWeight: 500,
+                      fontStyle: 'normal' }}>{item.verbatim_text}</mark>
+                  )}
+                  {item.context?.after && ` ${item.context.after}…`}
+                </span>
+              )}
+            </div>
+            <div style={{ padding: '5px 10px', background: DM.grey50,
+              borderTop: `1px solid ${DM.grey100}` }}>
+              <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 9,
+                color: DM.grey400 }}>
+                Nudge start/end to include surrounding content
+              </span>
+            </div>
+          </div>
 
           <div style={{ marginBottom: 12 }}>
             <Label style={{ display: 'block', marginBottom: 5 }}>Padding — {padding}ms</Label>
