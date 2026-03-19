@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Search, Upload, Scissors, FileText, Download, ChevronLeft, Plus, RefreshCw, X, Check, Loader, Folder, Trash2, AlertTriangle } from "lucide-react";
+import { Search, Upload, Scissors, FileText, Download, ChevronLeft, Plus, RefreshCw, X, Check, Loader, Folder, Trash2, AlertTriangle, BookOpen } from "lucide-react";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const DM_LOGO_SRC = "data:image/png;base64,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TBstr/1rcBzHMIxRo0ax57jqEhH/dkSeDE6aNGnYsGGQLgAKN7Tpur5x48a+ffvyaTV+H1wsw6mpqU899ZT7FOYLnYAQonfv3qtXr772jV9ehoPn4cOH77///r1793LVRtHqlnuw46BBg1577TW/lPcUheviicO4cePGjh0brpMjAEIf4qWUx44d69GjR05OTnisl7tpz+XLl7/zzjsXRmqW6n/84x8zZswIb9EKdl1paWkPPfTQyZMn+XzzotItlihd1wcNGvTee+/53b8XyhjTdX3EiBFz5sy5HnobACEI8VLKfv367d69mw93D6dwoWnayy+/zGlA99bYja1YseKll166fpI3LF3btm3r2bPnRT1o4eiWuwl35MiR7733nn9XSgsRPmZG07S+ffteUa4WAPBbE8H3339//vz54bfBn6NlTk7Of//3f7thmmsOjx071qdPH64Xv07SV+xBDcNYtmzZSy+99LubuuRVdynDMMaOHfv6669f3Q7wcG19IUR2dvbjjz/O9SloEwCu2o7s2rVrxIgRl7nm4dN7XL58+eLFi7m2kKs2nn/++f3794eZv7x81/WPf/zjiy++uPS8/4oDqyuMn332GXcpbLkt0PS6rm/btm348OEefKQsAH6ZAtq2/fzzz585c8Z1J+HKqFGj8vLyiEjX9blz586ePZuPa7g+v3QhxHPPPZeenn4J13XFusVO61//+tczzzzDRZwIzReVrkmTJn311Vf+OkYMAC8ELyKKjIz86KOPVqxYEd62g3Oh27Ztmz9/vqZpx48fHzZsmAefjR4yuNDv8OHDzz///CXmK/JK35Sfp9KzZ89z586F/TzoWsaeUmrIkCHsTdEgAFxRnMnIyHj11Ve9fGZuIcYKIcTEiROFEK+++ur+/fuDyzSuz3m/pmkLFiyYNWvWb2UL5RW1r1KKd8wdOXIkXJPOhTWNMgzj559/njJlyo033ogGAeAynRbXvo8ePTojI4M3g4b35JgrBjds2DBx4sTPPvvsepDqy9TyESNGHD9+/KLuU15R+2qaNnTo0LVr16IW43JmDUKIkSNHPvroozCmAFyOzSKi//3f/+3ateu0adPC+HTTi4aLgQMHZmVl4YG0lH+qSFpa2t///veLCrm8/GblE3wnTpyIzUmXb0+zs7M3bdqE1gDgMv1Wdnb2ggULzp49e10dVO3K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";
@@ -1106,6 +1106,383 @@ function BasketTab({ projectId, basket, setBasket }) {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// TRANSCRIPT READER — full-screen read + highlight-to-clip
+// ────────────────────────────────────────────────────────────────────────────
+
+function parseTimecodeMs(tc) {
+  const m3 = tc.match(/(?:^|\[)(\d{1,2}):(\d{2}):(\d{2})(?:\]|$)/);
+  if (m3) return (parseInt(m3[1]) * 3600 + parseInt(m3[2]) * 60 + parseInt(m3[3])) * 1000;
+  const m2 = tc.match(/(?:^|\[)(\d{1,2}):(\d{2})(?:\]|$)/);
+  if (m2) return (parseInt(m2[1]) * 60 + parseInt(m2[2])) * 1000;
+  return null;
+}
+
+function parseTranscriptSegments(rawText) {
+  const lines = rawText.split('\n');
+  const segments = [];
+  const tcRe = /\[(\d{1,2}:\d{2}(?::\d{2})?)\]/;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    const m = line.match(tcRe);
+    const ms = m ? parseTimecodeMs(m[0]) : null;
+    const text = line.replace(tcRe, '').trim();
+    if (!text && ms === null) continue;
+    const speakerM = text.match(/^([A-Z][^:]{0,30}):\s*(.+)/);
+    segments.push({
+      idx: segments.length,
+      ms,
+      timecodeStr: m ? m[1] : null,
+      speaker: speakerM ? speakerM[1] : null,
+      text: speakerM ? speakerM[2] : text,
+      isInterviewer: speakerM && /interviewer|moderator|facilitator|int\b|mod\b/i.test(speakerM[1]),
+    });
+  }
+  // Infer endMs: next segment's ms, or start + 30s
+  for (let i = 0; i < segments.length; i++) {
+    const next = segments.find((s, j) => j > i && s.ms !== null);
+    segments[i].endMs = next ? next.ms : (segments[i].ms != null ? segments[i].ms + 30000 : null);
+  }
+  return segments;
+}
+
+function TranscriptReader({ transcript, basket, setBasket, onBack }) {
+  const [segments, setSegments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [popover, setPopover] = useState(null); // { x, y, startMs, endMs, selectedText }
+  const [clipLabel, setClipLabel] = useState('');
+  const [addedId, setAddedId] = useState(null);
+  const containerRef = useRef(null);
+  const labelInputRef = useRef(null);
+
+  // Fetch raw transcript text
+  useEffect(() => {
+    setLoading(true); setError(null);
+    if (DEMO) {
+      // In demo: use a stub
+      setSegments(parseTranscriptSegments(
+        `[00:00:05] Interviewer: Thank you for joining us.\n[00:00:18] ${transcript.participant_label || 'Participant'}: Sure, happy to be here.\n[00:01:02] Interviewer: Tell me about your experience.\n[00:01:10] ${transcript.participant_label || 'Participant'}: It's been quite a journey honestly. I've changed my approach a lot over the years.`
+      ));
+      setLoading(false);
+      return;
+    }
+    fetch(`${API_URL_RESOLVED}/api/transcripts/${transcript.id}/raw`, { headers: hdrs() })
+      .then(r => r.json())
+      .then(d => {
+        if (d.transcript?.raw_text) {
+          setSegments(parseTranscriptSegments(d.transcript.raw_text));
+        } else {
+          setError('No transcript text available — transcript may not be indexed yet.');
+        }
+      })
+      .catch(() => setError('Failed to load transcript.'))
+      .finally(() => setLoading(false));
+  }, [transcript.id]);
+
+  // Focus label input on popover open
+  useEffect(() => {
+    if (popover && labelInputRef.current) {
+      setTimeout(() => labelInputRef.current?.focus(), 50);
+    }
+  }, [popover]);
+
+  // Yellow highlight for basket overlaps
+  const getBasketOverlap = useCallback((seg) => {
+    if (seg.ms == null) return null;
+    return basket.find(b =>
+      (b.source?.transcript_id === transcript.id) &&
+      seg.ms >= (b.timecode?.start_ms ?? b.startMs) - 500 &&
+      seg.ms <= (b.timecode?.end_ms ?? b.endMs) + 500
+    ) || null;
+  }, [basket, transcript.id]);
+
+  // Mouse-up: detect selection and find surrounding timecodes
+  const handleMouseUp = useCallback(() => {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || !sel.toString().trim()) return;
+    const selectedText = sel.toString().trim();
+    if (selectedText.length < 8) return;
+
+    const getSegIdx = (node) => {
+      let n = node;
+      while (n && n !== containerRef.current) {
+        if (n.dataset?.segidx !== undefined) return parseInt(n.dataset.segidx);
+        n = n.parentElement;
+      }
+      return null;
+    };
+    const anchorIdx = getSegIdx(sel.anchorNode);
+    const focusIdx  = getSegIdx(sel.focusNode);
+    if (anchorIdx === null && focusIdx === null) return;
+
+    const minIdx = Math.min(anchorIdx ?? focusIdx, focusIdx ?? anchorIdx);
+    const maxIdx = Math.max(anchorIdx ?? focusIdx, focusIdx ?? anchorIdx);
+    const covered = segments.filter(s => s.idx >= minIdx && s.idx <= maxIdx);
+    const startSeg = covered.find(s => s.ms !== null);
+    const endSeg   = [...covered].reverse().find(s => s.endMs !== null);
+    if (!startSeg) return;
+
+    const range = sel.getRangeAt(0);
+    const rect  = range.getBoundingClientRect();
+    const cRect = containerRef.current.getBoundingClientRect();
+
+    setPopover({
+      x: Math.min(rect.left - cRect.left, cRect.width - 344),
+      y: rect.bottom - cRect.top + 8,
+      startMs: startSeg.ms,
+      endMs:   endSeg ? endSeg.endMs : startSeg.ms + 30000,
+      selectedText: selectedText.substring(0, 120) + (selectedText.length > 120 ? '…' : ''),
+    });
+    setClipLabel('');
+  }, [segments]);
+
+  const dismissPopover = useCallback(() => {
+    setPopover(null);
+    setClipLabel('');
+    window.getSelection()?.removeAllRanges();
+  }, []);
+
+  const handleAddToBasket = useCallback(() => {
+    if (!popover) return;
+    const newItem = {
+      quote_id: `custom_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+      verbatim_text: popover.selectedText,
+      _customLabel: clipLabel || popover.selectedText.substring(0, 60),
+      _padding: 500,
+      timecode: { start_ms: popover.startMs, end_ms: popover.endMs },
+      source: {
+        transcript_id: transcript.id,
+        filename: transcript.filename,
+        participant_label: transcript.participant_label,
+        dropbox_video_path: transcript.dropbox_path,
+        market: transcript.market,
+        segment_name: transcript.segment_name,
+      },
+    };
+    setBasket(prev => [...prev, newItem]);
+    setAddedId(newItem.quote_id);
+    setTimeout(() => setAddedId(null), 1800);
+    dismissPopover();
+  }, [popover, clipLabel, transcript, setBasket, dismissPopover]);
+
+  // Escape closes popover
+  useEffect(() => {
+    const h = (e) => { if (e.key === 'Escape') dismissPopover(); };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [dismissPopover]);
+
+  // Count how many basket items are from this transcript
+  const readerBasketCount = basket.filter(b => b.source?.transcript_id === transcript.id).length;
+
+  return (
+    <div style={{ height: '100vh', overflow: 'hidden', display: 'flex',
+      flexDirection: 'column', background: DM.white }}>
+      <style>{`
+        ::selection { background: ${DM.yellow}; color: ${DM.black}; }
+        .reader-seg:hover { background: ${DM.grey50}; }
+        @keyframes popIn { from { opacity:0; transform:scale(0.97) translateY(-4px); } to { opacity:1; transform:scale(1) translateY(0); } }
+        @keyframes slideInRight { from { opacity:0; transform:translateX(16px); } to { opacity:1; transform:translateX(0); } }
+      `}</style>
+
+      {/* Header */}
+      <div style={{ height: 54, display: 'flex', alignItems: 'center', gap: 14,
+        padding: '0 24px', borderBottom: `1px solid ${DM.grey100}`, flexShrink: 0 }}>
+        <button onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 6,
+          padding: '6px 10px', background: 'transparent', border: `1.5px solid ${DM.grey200}`,
+          borderRadius: 4, cursor: 'pointer', color: DM.grey600,
+          fontFamily: "'Poppins', sans-serif", fontSize: 11, fontWeight: 500,
+          transition: 'all 0.15s' }}>
+          <ChevronLeft size={12} /> Back
+        </button>
+        <div style={{ width: 1, height: 22, background: DM.grey200 }} />
+        <DmLogo height={22} />
+        <div style={{ width: 1, height: 22, background: DM.grey200 }} />
+        <span style={{ fontFamily: "'Anton', sans-serif", fontSize: 14, color: DM.black }}>
+          CLIP EXPLORER
+        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 2 }}>
+          <BookOpen size={12} color={DM.grey400} />
+          <span style={{ fontFamily: "'Poppins', sans-serif", fontSize: 12,
+            fontWeight: 500, color: DM.grey600 }}>
+            {transcript.participant_label || transcript.filename}
+          </span>
+        </div>
+        <div style={{ flex: 1 }} />
+        {readerBasketCount > 0 && (
+          <Tag style={{ background: DM.yellowLight, border: `1.5px solid ${DM.yellow}`,
+            fontSize: 10, animation: 'slideInRight 0.2s ease' }}>
+            {readerBasketCount} clip{readerBasketCount !== 1 ? 's' : ''} added this session
+          </Tag>
+        )}
+        <button onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 6,
+          padding: '7px 14px', background: DM.yellow, border: 'none',
+          borderRadius: 4, cursor: 'pointer',
+          fontFamily: "'Anton', sans-serif", fontSize: 12, color: DM.black,
+          transition: 'all 0.15s' }}>
+          <Scissors size={11} /> Basket {basket.length > 0 ? `(${basket.length})` : ''}
+        </button>
+      </div>
+
+      {/* Body */}
+      <div style={{ flex: 1, overflowY: 'auto', position: 'relative' }}>
+        {loading && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center',
+            height: '100%', gap: 10 }}>
+            <Spinner size={18} />
+            <span style={{ fontFamily: "'Poppins', sans-serif", fontSize: 13,
+              color: DM.grey400 }}>Loading transcript…</span>
+          </div>
+        )}
+        {error && (
+          <div style={{ maxWidth: 560, margin: '60px auto', padding: '20px 24px',
+            background: '#FEE8EA', borderRadius: 4, fontFamily: "'Poppins', sans-serif",
+            fontSize: 12, color: DM.red }}>{error}</div>
+        )}
+        {!loading && !error && (
+          <>
+            {/* Instruction bar */}
+            <div style={{ padding: '10px 32px', background: DM.grey50,
+              borderBottom: `1px solid ${DM.grey100}`,
+              display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Label>How to use</Label>
+              <span style={{ fontFamily: "'Poppins', sans-serif", fontSize: 11, color: DM.grey600 }}>
+                Select any text to add as a clip. Yellow sections are already in your basket.
+              </span>
+            </div>
+
+            {/* Transcript */}
+            <div ref={containerRef} onMouseUp={handleMouseUp}
+              style={{ padding: '28px 32px 100px', maxWidth: 860, margin: '0 auto',
+                position: 'relative', userSelect: 'text' }}>
+              {segments.map((seg) => {
+                const overlap = getBasketOverlap(seg);
+                const isNew = overlap && addedId && overlap.quote_id === addedId;
+                return (
+                  <div key={seg.idx} data-segidx={seg.idx}
+                    className="reader-seg"
+                    style={{
+                      display: 'flex', gap: 18, padding: '5px 8px',
+                      borderRadius: 4, marginBottom: 2,
+                      background: overlap ? (isNew ? DM.yellowMid : DM.yellowLight) : 'transparent',
+                      borderLeft: overlap ? `3px solid ${DM.yellow}` : '3px solid transparent',
+                      transition: 'background 0.2s', cursor: 'text',
+                    }}>
+                    {/* Timecode column */}
+                    <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 10,
+                      color: DM.grey400, flexShrink: 0, width: 60,
+                      paddingTop: 3, userSelect: 'none' }}>
+                      {seg.timecodeStr || ''}
+                    </span>
+                    {/* Content */}
+                    <div style={{ flex: 1, lineHeight: 1.7 }}>
+                      {seg.speaker && (
+                        <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 9,
+                          letterSpacing: '0.06em', textTransform: 'uppercase',
+                          color: seg.isInterviewer ? DM.grey400 : DM.grey600,
+                          marginRight: 8 }}>{seg.speaker}:</span>
+                      )}
+                      <span style={{ fontSize: 13, fontWeight: 300,
+                        color: seg.isInterviewer ? DM.grey400 : DM.black,
+                        fontStyle: seg.isInterviewer ? 'italic' : 'normal' }}>
+                        {seg.text}
+                      </span>
+                      {overlap && (
+                        <span style={{ marginLeft: 8, fontSize: 9,
+                          fontFamily: "'Space Mono', monospace",
+                          background: DM.yellow, color: DM.black,
+                          padding: '1px 5px', borderRadius: 3,
+                          letterSpacing: '0.04em', userSelect: 'none' }}>
+                          {overlap._customLabel || 'in basket'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Selection popover */}
+              {popover && (
+                <div style={{
+                  position: 'absolute',
+                  left: Math.max(8, popover.x),
+                  top: popover.y,
+                  width: 336,
+                  background: DM.white,
+                  border: `1.5px solid ${DM.yellow}`,
+                  borderRadius: 6,
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.13)',
+                  padding: '14px 16px',
+                  zIndex: 200,
+                  animation: 'popIn 0.15s ease',
+                }}>
+                  {/* Quote preview */}
+                  <div style={{ marginBottom: 10 }}>
+                    <Label style={{ display: 'block', marginBottom: 4 }}>Selected quote</Label>
+                    <div style={{ fontSize: 11, fontWeight: 300, color: DM.grey600,
+                      background: DM.grey50, borderRadius: 4, padding: '8px 10px',
+                      lineHeight: 1.5, borderLeft: `3px solid ${DM.yellow}`,
+                      maxHeight: 58, overflow: 'hidden' }}>
+                      "{popover.selectedText}"
+                    </div>
+                  </div>
+                  {/* Timecodes */}
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                    {[['Start', popover.startMs], ['End', popover.endMs]].map(([lbl, ms]) => (
+                      <div key={lbl} style={{ flex: 1 }}>
+                        <Label style={{ display: 'block', marginBottom: 3 }}>{lbl}</Label>
+                        <div style={{ padding: '6px 8px', background: DM.grey50, borderRadius: 4,
+                          fontFamily: "'Space Mono', monospace", fontSize: 11, color: DM.black,
+                          border: `1px solid ${DM.grey200}` }}>{fmt(ms)}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Label */}
+                  <div style={{ marginBottom: 12 }}>
+                    <Label style={{ display: 'block', marginBottom: 4 }}>Clip label (optional)</Label>
+                    <input
+                      ref={labelInputRef}
+                      value={clipLabel}
+                      onChange={e => setClipLabel(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') handleAddToBasket();
+                        if (e.key === 'Escape') dismissPopover();
+                      }}
+                      placeholder="e.g. Wealth as freedom"
+                      style={{ width: '100%', padding: '7px 10px',
+                        border: `1.5px solid ${DM.grey200}`, borderRadius: 4,
+                        fontFamily: "'Poppins', sans-serif", fontSize: 12,
+                        color: DM.black, background: DM.white, boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  {/* Actions */}
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={handleAddToBasket} style={{ flex: 1, padding: '9px 0',
+                      background: DM.yellow, border: 'none', borderRadius: 4,
+                      fontFamily: "'Anton', sans-serif", fontSize: 13,
+                      cursor: 'pointer', display: 'flex', alignItems: 'center',
+                      justifyContent: 'center', gap: 6, transition: 'all 0.15s' }}>
+                      <Scissors size={12} /> ADD TO BASKET
+                    </button>
+                    <button onClick={dismissPopover} style={{ padding: '9px 12px',
+                      background: 'transparent', border: `1.5px solid ${DM.grey200}`,
+                      borderRadius: 4, cursor: 'pointer', color: DM.grey600,
+                      fontFamily: "'Poppins', sans-serif", fontSize: 11 }}>
+                      <X size={12} />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // TRANSCRIPTS TAB — with batch upload + pre-upload cleaning flow
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -1381,7 +1758,7 @@ function CustomClipPicker({ transcript, onAdd, onClose }) {
   );
 }
 
-function TranscriptsTab({ projectId, transcripts, setTranscripts, onAddToBasket }) {
+function TranscriptsTab({ projectId, transcripts, setTranscripts, onAddToBasket, onOpenReader }) {
   const [queue, setQueue] = useState([]);          // files being cleaned/staged
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ done: 0, total: 0 });
@@ -1829,6 +2206,17 @@ function TranscriptsTab({ projectId, transcripts, setTranscripts, onAddToBasket 
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
                 <StatusBadge status={t.indexing_status} />
+                <button onClick={() => onOpenReader(t)}
+                  title="Read transcript"
+                  style={{ background: 'none',
+                    border: `1px solid ${DM.grey200}`,
+                    borderRadius: 4, cursor: 'pointer', color: DM.grey600,
+                    padding: '3px 8px', display: 'flex', alignItems: 'center', gap: 4,
+                    fontFamily: "'Poppins', sans-serif", fontSize: 10, transition: 'all 0.15s' }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = DM.yellow; e.currentTarget.style.background = DM.yellowLight; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = DM.grey200; e.currentTarget.style.background = 'none'; }}>
+                  <BookOpen size={11} /> Read
+                </button>
                 <button onClick={() => setClipPicker(p => p === t.id ? null : t.id)}
                   title="Create custom clip"
                   style={{ background: clipPicker === t.id ? DM.yellowLight : 'none',
@@ -1951,6 +2339,7 @@ export default function App() {
   const [basket, setBasket] = useState([]);
   const [transcripts, setTranscripts] = useState([]);
   const [manifest, setManifest] = useState(null);
+  const [readerTranscript, setReaderTranscript] = useState(null);
 
   const selectProject = async (p) => {
     setProject(p);
@@ -1963,6 +2352,17 @@ export default function App() {
       const mr = await fetch(`${API_URL_RESOLVED}/api/projects/${p.id}/manifest`, { headers: hdrs() });
       if (mr.ok) { const md = await mr.json(); setManifest(md); }
     } catch {}
+  };
+
+  const openReader = (t) => {
+    setReaderTranscript(t);
+    setScreen("reader");
+  };
+
+  const closeReader = () => {
+    setReaderTranscript(null);
+    setScreen("main");
+    setTab("transcripts");
   };
 
   return (
@@ -1984,6 +2384,15 @@ export default function App() {
 
       {screen === "project-select" && (
         <ProjectSelectScreen onSelect={selectProject} />
+      )}
+
+      {screen === "reader" && readerTranscript && (
+        <TranscriptReader
+          transcript={readerTranscript}
+          basket={basket}
+          setBasket={setBasket}
+          onBack={closeReader}
+        />
       )}
 
       {screen === "main" && project && (
@@ -2034,7 +2443,8 @@ export default function App() {
             {tab === "transcripts" && (
               <TranscriptsTab projectId={project.id}
                 transcripts={transcripts} setTranscripts={setTranscripts}
-                onAddToBasket={(clip) => { setBasket(b => [...b, clip]); setTab('basket'); }} />
+                onAddToBasket={(clip) => { setBasket(b => [...b, clip]); setTab('basket'); }}
+                onOpenReader={openReader} />
             )}
           </div>
         </>
