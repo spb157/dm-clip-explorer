@@ -2133,13 +2133,37 @@ function TranscriptsTab({ projectId, transcripts, setTranscripts, onAddToBasket,
         method: 'POST', headers: hdrs(), body: JSON.stringify(participants)
       });
 
-      for (const item of (matchPreview || [])) {
+      // Re-run fresh match against current transcripts regardless of what
+      // matchPreview shows — handles manifest-before-transcripts upload order.
+      const freshMatch = transcripts.map(t => {
+        const norm = t.filename.toLowerCase()
+          .replace(/\.(docx|txt|vtt)$/i, '')
+          .replace(/[-_\s]+(transcript|interview|cleaned|final|copy)[-_\s]*/gi, ' ')
+          .replace(/\s+/g, ' ').trim();
+        let best = null, bestScore = 0;
+        for (const row of manifestRows) {
+          const fullCandidates = [
+            String(row.interview_id || ''),
+            String(row.participant_label || ''),
+          ].map(s => s.toLowerCase().trim()).filter(Boolean);
+          const wordCandidates = fullCandidates
+            .flatMap(s => s.split(/[\s,_-]+/))
+            .map(s => s.trim())
+            .filter(s => s.length >= 3);
+          for (const c of [...fullCandidates, ...wordCandidates]) {
+            if (c && norm.includes(c) && c.length > bestScore) {
+              bestScore = c.length; best = row;
+            }
+          }
+        }
+        return { transcript: t, match: best };
+      });
+
+      for (const item of freshMatch) {
         if (!item.match || !item.transcript) continue;
         let dp = String(item.match.dropbox_path || item.match['Dropbox Path'] || '').trim();
         if (dp) {
-          // Normalise: ensure leading slash
           if (!dp.startsWith('/')) dp = '/' + dp;
-          // Ensure .mp4 extension if no extension present
           if (!/\.\w{2,4}$/.test(dp)) dp = dp + '.mp4';
           await fetch(
             `${API_URL_RESOLVED}/api/projects/${projectId}/transcripts/${item.transcript.id}/dropbox-path`,
