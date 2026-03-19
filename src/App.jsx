@@ -346,7 +346,7 @@ function SearchTab({ projectId, manifest, externalBasket, setExternalBasket }) {
       setLoading(false); return;
     }
     try {
-      const body = { query, limit: 40, filters };
+      const body = { query, limit: 150, filters };
       const r = await fetch(`${API_URL_RESOLVED}/api/projects/${projectId}/search`, {
         method: "POST", headers: hdrs(), body: JSON.stringify(body)
       });
@@ -529,7 +529,7 @@ function SearchTab({ projectId, manifest, externalBasket, setExternalBasket }) {
           {results.length > 0 && (
             <div style={{ marginBottom: 14, display: "flex",
               justifyContent: "space-between", alignItems: "center" }}>
-              <Label>{results.length} RESULT{results.length !== 1 ? "S" : ""}</Label>
+              <Label>{results.length} RESULT{results.length !== 1 ? "S" : ""}{results.length >= 150 ? " — top 150 shown" : ""}</Label>
               <Label>{basket.length} IN BASKET</Label>
             </div>
           )}
