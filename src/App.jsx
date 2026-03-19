@@ -2624,19 +2624,11 @@ export default function App() {
     } catch {}
   };
 
-  const openReader = async (t) => {
-    // Refresh the transcript row from the project endpoint before opening —
-    // the project GET already returns dropbox_path and is guaranteed deployed.
-    // This ensures we never pass a stale snapshot (e.g. pre-manifest) into the reader.
-    let fresh = t;
-    if (!DEMO) {
-      try {
-        const r = await fetch(`${API_URL_RESOLVED}/api/projects/${project.id}`, { headers: hdrs() });
-        const d = await r.json();
-        fresh = d.transcripts?.find(tr => tr.id === t.id) || t;
-      } catch {}
-    }
-    setReaderTranscript(fresh);
+  const openReader = (t) => {
+    // Use the transcript from current state — this includes any path set via Set path button.
+    // No DB fetch needed: the transcripts state is the source of truth here.
+    const current = transcripts.find(tr => tr.id === t.id) || t;
+    setReaderTranscript(current);
     setScreen("reader");
   };
 
