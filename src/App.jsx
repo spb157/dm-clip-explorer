@@ -1232,44 +1232,51 @@ function parseInlineSegments(rawText) {
   return segments;
 }
 
-function TranscriptReader({ transcript, basket, setBasket, onBack }) {
+function TranscriptReader({ transcript, projectId, basket, setBasket, onBack }) {
   const [segments, setSegments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [popover, setPopover] = useState(null);
   const [clipLabel, setClipLabel] = useState('');
   const [addedId, setAddedId] = useState(null);
-  // dropboxPath: live value fetched from DB, overrides potentially-stale prop
-  const [dropboxPath, setDropboxPath] = useState(transcript.dropbox_path || null);
+  // Always start null and populate from a live DB fetch — never trust the prop snapshot
+  const [dropboxPath, setDropboxPath] = useState(null);
   const containerRef = useRef(null);
   const labelInputRef = useRef(null);
 
-  // Fetch raw transcript text — also refreshes dropbox_path from DB
+  // Fetch raw text + resolve fresh dropbox_path in one shot.
+  // Uses the project endpoint (definitely deployed) as the authoritative source for the path.
   useEffect(() => {
     setLoading(true); setError(null);
     if (DEMO) {
+      setDropboxPath('/demo/video.mp4');
       setSegments(parseTranscriptSegments(
-        `[00:00:05] Interviewer: Thank you for joining us.\n[00:00:18] ${transcript.participant_label || 'Participant'}: Sure, happy to be here.\n[00:01:02] Interviewer: Tell me about your experience.\n[00:01:10] ${transcript.participant_label || 'Participant'}: It's been quite a journey honestly. I've changed my approach a lot over the years.`
+        `[00:00:05] Interviewer: Thank you for joining us.\n[00:00:18] ${transcript.participant_label || 'Participant'}: Sure, happy to be here.\n[00:01:02] Interviewer: Tell me about your experience.\n[00:01:10] ${transcript.participant_label || 'Participant'}: It's been quite a journey honestly.`
       ));
       setLoading(false);
       return;
     }
-    fetch(`${API_URL_RESOLVED}/api/transcripts/${transcript.id}/raw`, { headers: hdrs() })
-      .then(r => r.json())
-      .then(d => {
-        if (d.transcript?.raw_text) {
-          setSegments(parseTranscriptSegments(d.transcript.raw_text));
-          // Always use the DB value — it may be newer than the prop snapshot
-          if (d.transcript.dropbox_path) {
-            setDropboxPath(d.transcript.dropbox_path);
-          }
-        } else {
-          setError('No transcript text available — transcript may not be indexed yet.');
-        }
-      })
-      .catch(() => setError('Failed to load transcript.'))
-      .finally(() => setLoading(false));
-  }, [transcript.id]);
+
+    // Fetch both in parallel: raw text + fresh transcript metadata (for dropbox_path)
+    Promise.all([
+      fetch(`${API_URL_RESOLVED}/api/transcripts/${transcript.id}/raw`, { headers: hdrs() })
+        .then(r => r.json()).catch(() => null),
+      fetch(`${API_URL_RESOLVED}/api/projects/${projectId}`, { headers: hdrs() })
+        .then(r => r.json()).catch(() => null),
+    ]).then(([rawData, projectData]) => {
+      // Resolve dropbox_path — try raw response first, then project transcripts list
+      const fromRaw     = rawData?.transcript?.dropbox_path;
+      const fromProject = projectData?.transcripts?.find(t => t.id === transcript.id)?.dropbox_path;
+      const resolved    = fromRaw || fromProject || transcript.dropbox_path || null;
+      setDropboxPath(resolved);
+
+      if (rawData?.transcript?.raw_text) {
+        setSegments(parseTranscriptSegments(rawData.transcript.raw_text));
+      } else {
+        setError('No transcript text available — transcript may not be indexed yet.');
+      }
+    }).finally(() => setLoading(false));
+  }, [transcript.id, projectId]);
 
   // Focus label input on popover open
   useEffect(() => {
@@ -2505,6 +2512,7 @@ export default function App() {
       {screen === "reader" && readerTranscript && (
         <TranscriptReader
           transcript={readerTranscript}
+          projectId={project.id}
           basket={basket}
           setBasket={setBasket}
           onBack={closeReader}
