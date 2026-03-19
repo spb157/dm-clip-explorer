@@ -774,6 +774,41 @@ function BasketCard({ item, onUpdate, onRemove }) {
                   boxSizing: 'border-box', outline: 'none' }} />
             </div>
           </div>
+          {/* Mini transcript view */}
+          {(item.context?.before || item.verbatim_text || item.context?.after) && (
+            <div style={{ marginBottom: 12, border: `1px solid ${DM.grey200}`,
+              borderRadius: 4, overflow: 'hidden', fontSize: 11,
+              fontFamily: "'Poppins', sans-serif", lineHeight: 1.7 }}>
+              <div style={{ padding: '6px 10px', background: DM.grey50,
+                borderBottom: `1px solid ${DM.grey100}` }}>
+                <Label>Transcript context</Label>
+              </div>
+              <div style={{ padding: '10px 12px', maxHeight: 180, overflowY: 'auto' }}>
+                {item.context?.before && (
+                  <span style={{ color: DM.grey400, fontWeight: 300,
+                    fontStyle: 'italic' }}>…{item.context.before} </span>
+                )}
+                {item.verbatim_text && (
+                  <span style={{ background: DM.yellow, padding: '1px 3px',
+                    borderRadius: 2, color: DM.black, fontWeight: 500 }}>
+                    {item.verbatim_text}
+                  </span>
+                )}
+                {item.context?.after && (
+                  <span style={{ color: DM.grey400, fontWeight: 300,
+                    fontStyle: 'italic' }}> {item.context.after}…</span>
+                )}
+              </div>
+              <div style={{ padding: '5px 10px', background: DM.grey50,
+                borderTop: `1px solid ${DM.grey100}` }}>
+                <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 9,
+                  color: DM.grey400 }}>
+                  Nudge timecodes to include more surrounding content
+                </span>
+              </div>
+            </div>
+          )}
+
           <div style={{ marginBottom: 12 }}>
             <Label style={{ display: 'block', marginBottom: 5 }}>Padding — {padding}ms</Label>
             <input type="range" min={0} max={2000} step={100} value={padding}
