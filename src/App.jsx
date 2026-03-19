@@ -149,6 +149,8 @@ function ProjectSelectScreen({ onSelect }) {
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(null); // project id
+  const [deleting, setDeleting] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -174,6 +176,18 @@ function ProjectSelectScreen({ onSelect }) {
       if (d.project) { setProjects(p => [d.project, ...p]); setNewName(""); setShowCreate(false); }
     } catch {}
     setCreating(false);
+  };
+
+  const deleteProject = async (projectId) => {
+    setDeleting(projectId);
+    try {
+      await fetch(`${API_URL_RESOLVED}/api/projects/${projectId}`, {
+        method: "DELETE", headers: hdrs()
+      });
+      setProjects(p => p.filter(x => x.id !== projectId));
+    } catch {}
+    setDeleting(null);
+    setConfirmDelete(null);
   };
 
   return (
@@ -262,24 +276,30 @@ function ProjectSelectScreen({ onSelect }) {
 
           <div style={{ display: "grid", gap: 12 }}>
             {projects.map(p => (
-              <div key={p.id} onClick={() => onSelect(p)}
-                style={{ padding: "20px 24px", border: `1.5px solid ${DM.grey100}`,
-                  borderRadius: 4, cursor: "pointer", background: DM.white,
+              <div key={p.id}
+                style={{ padding: "20px 24px",
+                  border: `1.5px solid ${confirmDelete === p.id ? '#FECACA' : DM.grey100}`,
+                  borderRadius: 4, background: confirmDelete === p.id ? '#FEF2F2' : DM.white,
                   transition: "all 0.15s", display: "flex",
                   alignItems: "center", justifyContent: "space-between",
                   animation: "fadeUp 0.2s ease" }}
                 onMouseEnter={e => {
+                  if (confirmDelete === p.id) return;
                   e.currentTarget.style.borderColor = DM.yellow;
                   e.currentTarget.style.background = DM.yellowLight;
                 }}
                 onMouseLeave={e => {
+                  if (confirmDelete === p.id) return;
                   e.currentTarget.style.borderColor = DM.grey100;
                   e.currentTarget.style.background = DM.white;
                 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                {/* Left — clickable to open */}
+                <div style={{ display: "flex", alignItems: "center", gap: 16,
+                  flex: 1, cursor: "pointer" }}
+                  onClick={() => confirmDelete !== p.id && onSelect(p)}>
                   <div style={{ width: 36, height: 36, borderRadius: 4,
-                    background: DM.yellow, display: "flex",
-                    alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    background: confirmDelete === p.id ? '#FECACA' : DM.yellow,
+                    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                     <Folder size={16} color={DM.black} />
                   </div>
                   <div>
@@ -293,20 +313,53 @@ function ProjectSelectScreen({ onSelect }) {
                     )}
                   </div>
                 </div>
-                <div style={{ display: "flex", gap: 16, alignItems: "center",
-                  flexShrink: 0 }}>
-                  <div style={{ textAlign: "right" }}>
-                    <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 18,
-                      color: DM.black }}>{p.indexed_count ?? 0}</div>
-                    <Label>indexed</Label>
-                  </div>
-                  <div style={{ width: 1, height: 28, background: DM.grey100 }} />
-                  <div style={{ textAlign: "right" }}>
-                    <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 18,
-                      color: DM.grey400 }}>{p.transcript_count ?? 0}</div>
-                    <Label>transcripts</Label>
-                  </div>
-                  <div style={{ color: DM.grey200, marginLeft: 4 }}>›</div>
+
+                {/* Right */}
+                <div style={{ display: "flex", gap: 16, alignItems: "center", flexShrink: 0 }}>
+                  {confirmDelete === p.id ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontFamily: "'Poppins', sans-serif", fontSize: 11,
+                        color: DM.red }}>Delete project + all data?</span>
+                      <button onClick={() => deleteProject(p.id)} disabled={deleting === p.id}
+                        style={{ padding: "4px 12px", borderRadius: 3,
+                          border: `1px solid ${DM.red}`, background: DM.red,
+                          color: DM.white, fontFamily: "'Poppins', sans-serif",
+                          fontSize: 10, fontWeight: 500, cursor: "pointer",
+                          display: "flex", alignItems: "center", gap: 4 }}>
+                        {deleting === p.id ? <Spinner size={9} color={DM.white} /> : null} Confirm
+                      </button>
+                      <button onClick={() => setConfirmDelete(null)}
+                        style={{ padding: "4px 10px", borderRadius: 3,
+                          border: `1px solid ${DM.grey200}`, background: "none",
+                          fontFamily: "'Poppins', sans-serif", fontSize: 10,
+                          color: DM.grey600, cursor: "pointer" }}>Cancel</button>
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 18,
+                          color: DM.black }}>{p.indexed_count ?? 0}</div>
+                        <Label>indexed</Label>
+                      </div>
+                      <div style={{ width: 1, height: 28, background: DM.grey100 }} />
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 18,
+                          color: DM.grey400 }}>{p.transcript_count ?? 0}</div>
+                        <Label>transcripts</Label>
+                      </div>
+                      <div style={{ color: DM.grey200, marginLeft: 4 }}>›</div>
+                      <button
+                        onClick={e => { e.stopPropagation(); setConfirmDelete(p.id); }}
+                        style={{ background: "none", border: "none", cursor: "pointer",
+                          color: DM.grey200, padding: 4, display: "flex", alignItems: "center",
+                          transition: "color 0.15s", marginLeft: -8 }}
+                        onMouseEnter={e => e.currentTarget.style.color = DM.red}
+                        onMouseLeave={e => e.currentTarget.style.color = DM.grey200}
+                        title="Delete project">
+                        <Trash2 size={14} />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             ))}
