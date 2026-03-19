@@ -2077,6 +2077,7 @@ function TranscriptsTab({ projectId, transcripts, setTranscripts, onAddToBasket,
     if (!rows.length) return;
     setManifestCols(Object.keys(rows[0]));
     setManifestRows(rows);
+    setManifestDone(false); // reset so preview + confirm button show again on re-upload
 
     const preview = transcripts.map(t => {
       const norm = t.filename.toLowerCase()
@@ -2173,6 +2174,7 @@ function TranscriptsTab({ projectId, transcripts, setTranscripts, onAddToBasket,
       }
       await refresh();
       setManifestDone(true);
+      setMatchPreview(null); // clear preview after successful apply
     } catch (err) { console.error('manifest confirm error:', err); }
     setManifestUploading(false);
   };
@@ -2212,7 +2214,7 @@ function TranscriptsTab({ projectId, transcripts, setTranscripts, onAddToBasket,
         )}
 
         {/* Manifest match preview */}
-        {matchPreview && !manifestDone && (
+        {matchPreview && (
           <div style={{ marginBottom: 20, border: `1.5px solid ${DM.yellow}`, borderRadius: 4,
             overflow: 'hidden', animation: 'fadeUp 0.2s ease' }}>
             <div style={{ padding: '12px 16px', background: DM.yellowLight,
@@ -2273,8 +2275,15 @@ function TranscriptsTab({ projectId, transcripts, setTranscripts, onAddToBasket,
           <div style={{ padding: '12px 16px', background: '#E6F4EC', borderRadius: 4,
             marginBottom: 16, border: `1px solid ${DM.green}`,
             fontFamily: "'Poppins', sans-serif", fontSize: 11, color: DM.green,
-            display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Check size={12} /> Manifest applied — metadata and video paths updated
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Check size={12} /> Manifest applied — metadata and video paths updated
+            </span>
+            <button onClick={() => setManifestDone(false)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer',
+                color: DM.green, padding: 2 }}>
+              <X size={12} />
+            </button>
           </div>
         )}
 
