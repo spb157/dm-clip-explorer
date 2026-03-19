@@ -1293,46 +1293,33 @@ function TranscriptReader({ transcript, projectId, basket, setBasket, onBack }) 
   const [clipLabel, setClipLabel] = useState('');
   const [addedId, setAddedId] = useState(null);
   // Always start null and populate from a live DB fetch — never trust the prop snapshot
-  // Initialise from prop immediately — openReader already fetches fresh data before
-  // setting readerTranscript, so transcript.dropbox_path is already up-to-date.
-  // The useEffect below overwrites with DB value if the fetches succeed.
-  const [dropboxPath, setDropboxPath] = useState(transcript.dropbox_path || null);
   const containerRef = useRef(null);
   const labelInputRef = useRef(null);
 
-  // Fetch raw text + resolve fresh dropbox_path in one shot.
-  // Uses the project endpoint (definitely deployed) as the authoritative source for the path.
+  // Fetch raw text only — dropbox_path comes directly from the transcript prop.
+  // openReader() already does a fresh DB fetch before setting readerTranscript,
+  // so transcript.dropbox_path is always current. No state needed.
   useEffect(() => {
     setLoading(true); setError(null);
     if (DEMO) {
-      setDropboxPath('/demo/video.mp4');
       setSegments(parseTranscriptSegments(
         `[00:00:05] Interviewer: Thank you for joining us.\n[00:00:18] ${transcript.participant_label || 'Participant'}: Sure, happy to be here.\n[00:01:02] Interviewer: Tell me about your experience.\n[00:01:10] ${transcript.participant_label || 'Participant'}: It's been quite a journey honestly.`
       ));
       setLoading(false);
       return;
     }
-
-    // Fetch both in parallel: raw text + fresh transcript metadata (for dropbox_path)
-    Promise.all([
-      fetch(`${API_URL_RESOLVED}/api/transcripts/${transcript.id}/raw`, { headers: hdrs() })
-        .then(r => r.json()).catch(() => null),
-      fetch(`${API_URL_RESOLVED}/api/projects/${projectId}`, { headers: hdrs() })
-        .then(r => r.json()).catch(() => null),
-    ]).then(([rawData, projectData]) => {
-      // Resolve dropbox_path — try raw response first, then project transcripts list
-      const fromRaw     = rawData?.transcript?.dropbox_path;
-      const fromProject = projectData?.transcripts?.find(t => t.id === transcript.id)?.dropbox_path;
-      const resolved    = fromRaw || fromProject || transcript.dropbox_path || null;
-      setDropboxPath(resolved);
-
-      if (rawData?.transcript?.raw_text) {
-        setSegments(parseTranscriptSegments(rawData.transcript.raw_text));
-      } else {
-        setError('No transcript text available — transcript may not be indexed yet.');
-      }
-    }).finally(() => setLoading(false));
-  }, [transcript.id, projectId]);
+    fetch(`${API_URL_RESOLVED}/api/transcripts/${transcript.id}/raw`, { headers: hdrs() })
+      .then(r => r.json())
+      .then(d => {
+        if (d.transcript?.raw_text) {
+          setSegments(parseTranscriptSegments(d.transcript.raw_text));
+        } else {
+          setError('No transcript text available — transcript may not be indexed yet.');
+        }
+      })
+      .catch(() => setError('Failed to load transcript.'))
+      .finally(() => setLoading(false));
+  }, [transcript.id]);
 
   // Focus label input on popover open
   useEffect(() => {
@@ -1409,7 +1396,7 @@ function TranscriptReader({ transcript, projectId, basket, setBasket, onBack }) 
         transcript_id: transcript.id,
         filename: transcript.filename,
         participant_label: transcript.participant_label,
-        dropbox_video_path: dropboxPath,   // live DB value, not stale prop
+        dropbox_video_path: transcript.dropbox_path,   // live DB value, not stale prop
         market: transcript.market,
         segment_name: transcript.segment_name,
       },
@@ -1418,7 +1405,7 @@ function TranscriptReader({ transcript, projectId, basket, setBasket, onBack }) 
     setAddedId(newItem.quote_id);
     setTimeout(() => setAddedId(null), 1800);
     dismissPopover();
-  }, [popover, clipLabel, transcript, dropboxPath, setBasket, dismissPopover]);
+  }, [popover, clipLabel, transcript, setBasket, dismissPopover]);
 
   // Escape closes popover
   useEffect(() => {
@@ -1509,7 +1496,7 @@ function TranscriptReader({ transcript, projectId, basket, setBasket, onBack }) 
             </div>
 
             {/* No video path warning */}
-            {!dropboxPath && (
+            {!transcript.dropbox_path && (
               <div style={{ padding: '10px 32px', background: '#FEF9C3',
                 borderBottom: `1px solid #FDE68A`,
                 display: 'flex', alignItems: 'center', gap: 8 }}>
