@@ -982,7 +982,9 @@ function FileCleaningCard({ item, onUpdate, onRemove }) {
 
   const applyPrefix = () => {
     if (!idPrefix.trim()) return;
-    const newFilename = `${idPrefix.trim()}_${filename.replace(/^[A-Za-z0-9]{2,6}[-_]/, '')}`;
+    // Strip existing prefix — anything up to the first space, dash, or underscore
+    const stripped = filename.replace(/^[A-Za-z0-9]{1,10}[\s\-_]+/, '');
+    const newFilename = `${idPrefix.trim()}_${stripped || filename}`;
     onUpdate({ filename: newFilename, validation: { ...validation, hasPrefix: true } });
   };
 
