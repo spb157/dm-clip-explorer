@@ -451,22 +451,29 @@ function saveNotes(notes) {
 }
 
 function EnergyIndicator({ score }) {
-  const label = score < 20 ? "FLAT" : score < 45 ? "DEVELOPING" : score < 70 ? "SHARPENING" : "SHARP";
   const pct = Math.min(100, Math.max(0, score));
   const trackColor = score < 20 ? DM.grey200 : score < 45 ? "#FDE68A" : DM.yellow;
   return (
     <div style={{ padding: "14px 16px", borderBottom: `1px solid ${DM.grey100}` }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-        <span style={{ color: DM.yellow, fontWeight: 700, fontSize: 14, lineHeight: 1 }}>+</span>
-        <Label>Insight Energy</Label>
-        <span style={{ marginLeft: "auto", fontFamily: "\'Space Mono\', monospace", fontSize: 8, color: score < 20 ? DM.grey400 : DM.black, letterSpacing: "0.06em" }}>{label}</span>
+      <Label style={{ display: "block", marginBottom: 10 }}>Insight Energy</Label>
+      <div style={{ position: "relative", height: 16, marginBottom: 4 }}>
+        <div style={{ position: "absolute", top: "50%", left: 0, right: 0, height: 4, background: DM.grey100, borderRadius: 2, transform: "translateY(-50%)" }} />
+        <div style={{ position: "absolute", top: "50%", left: 0, height: 4, width: `${pct}%`, background: trackColor, borderRadius: 2, transform: "translateY(-50%)", transition: "width 0.4s ease" }} />
+        <div style={{
+          position: "absolute", top: "50%", left: `${pct}%`,
+          transform: "translate(-50%, -50%)",
+          width: 18, height: 18, borderRadius: "50%",
+          background: pct === 0 ? DM.grey200 : DM.yellow,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontFamily: "\'Poppins\', sans-serif", fontWeight: 700, fontSize: 12, color: DM.black,
+          boxShadow: "0 1px 3px rgba(0,0,0,0.12)",
+          transition: "left 0.4s ease, background 0.4s ease",
+          zIndex: 1,
+        }}>+</div>
       </div>
-      <div style={{ height: 5, background: DM.grey100, borderRadius: 3, position: "relative", overflow: "hidden" }}>
-        <div style={{ position: "absolute", left: 0, top: 0, height: "100%", width: `${pct}%`, background: trackColor, borderRadius: 3, transition: "width 0.4s ease" }} />
-      </div>
-      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
-        <span style={{ fontFamily: "\'Space Mono\', monospace", fontSize: 7, color: DM.grey400 }}>FLAT</span>
-        <span style={{ fontFamily: "\'Space Mono\', monospace", fontSize: 7, color: DM.grey400 }}>SHARP</span>
+      <div style={{ display: "flex", justifyContent: "space-between" }}>
+        <span style={{ fontFamily: "\'Space Mono\', monospace", fontSize: 7, color: DM.grey400, letterSpacing: "0.06em" }}>FLAT</span>
+        <span style={{ fontFamily: "\'Space Mono\', monospace", fontSize: 7, color: DM.grey400, letterSpacing: "0.06em" }}>SHARP</span>
       </div>
     </div>
   );
